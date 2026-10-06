@@ -34,3 +34,8 @@ body {
   font-size: 12px;
   white-space: nowrap;
 }
+
+body.player-cursor-hidden,
+body.player-cursor-hidden * {
+  cursor: none;
+}

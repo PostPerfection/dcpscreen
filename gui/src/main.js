@@ -2,7 +2,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { Window, availableMonitors } from "@tauri-apps/api/window";
 import { open, message } from "@tauri-apps/plugin-dialog";
-import { initPreview, previewFile, stopPreview } from "../../extern/guikit/src/preview.js";
+import { initPreview, previewFile, stopPreview, watchPreviewMetadata } from "../../extern/guikit/src/preview.js";
 import { initJobsPanel, refreshJobs, startJobsPolling, stopJobsPolling } from "../../extern/guikit/src/jobs.js";
 import { initLibraryPanel, refreshLibrary } from "../../extern/guikit/src/library.js";
 import { initKeysPanel, refreshKeys } from "../../extern/guikit/src/keys.js";
@@ -10,6 +10,7 @@ import { initGpuSettings, fillGpuSettings, gpuSettingsFromForm, uncheckGpu, appl
 import { settingsFromFields, withLibraryRoot, withoutLibraryRoot } from "./settings-form.js";
 import { playRefusalText } from "./play-refusal.js";
 import { playerMonitorChoices } from "./player-monitor.js";
+import { playerControlCommands, playerControlsFromFields, playerWarningText, soundDeviceChoices } from "./player-controls.js";
 
 const KDM_FILTERS = [{ name: "KDM", extensions: ["xml"] }];
 const CERTIFICATE_FILTERS = [{ name: "Certificate", extensions: ["pem", "crt"] }];
@@ -24,14 +25,37 @@ const PLAYER_WINDOW_LABEL = "player";
 // the Rust side sends it when the window manager closes the player window
 const PLAYER_CLOSE_REQUESTED_EVENT = "player-close-requested";
 const MAIN_WINDOW_MONITOR_TEXT = "Same as the main window";
+const DEFAULT_SOUND_DEVICE_TEXT = "Default";
+const READY_STATUS = "Ready";
+const BRIGHTNESS_DECIMALS = 2;
+const DEFAULT_SUBTITLE_COLOUR = "#ffffff";
 
 const certificateInput = document.getElementById("set-recipient-certificate");
 const privateKeyInput = document.getElementById("set-recipient-key");
 const libraryRootsList = document.getElementById("set-library-roots");
 const playerMonitorSelect = document.getElementById("set-player-monitor");
+const playerFields = {
+  brightness: document.getElementById("set-player-brightness"),
+  brightnessValue: document.getElementById("set-player-brightness-value"),
+  maskTop: document.getElementById("set-player-mask-top"),
+  maskBottom: document.getElementById("set-player-mask-bottom"),
+  maskLeft: document.getElementById("set-player-mask-left"),
+  maskRight: document.getElementById("set-player-mask-right"),
+  scaling: document.getElementById("set-player-scaling"),
+  soundDevice: document.getElementById("set-player-sound-device"),
+  soundLayout: document.getElementById("set-player-sound-layout"),
+  soundDelayMilliseconds: document.getElementById("set-player-sound-delay"),
+  subtitleOffsetPercent: document.getElementById("set-player-subtitle-offset"),
+  subtitleColourOverridden: document.getElementById("set-player-subtitle-colour-overridden"),
+  subtitleColour: document.getElementById("set-player-subtitle-colour"),
+};
 const playerWindow = await Window.getByLabel(PLAYER_WINDOW_LABEL);
 let libraryRoots = [];
 let libraryPoll = null;
+// what the player was last given, null before the first apply
+let appliedPlayerControls = null;
+// the warning line on the status bar, null while the player has none
+let shownPlayerWarning = null;
 
 function setStatus(text) {
   const el = document.getElementById("status-text");
@@ -170,7 +194,7 @@ function renderLibraryRoots() {
   }));
 }
 
-function monitorOption(value, text) {
+function choiceOption(value, text) {
   const option = document.createElement("option");
   option.value = value;
   option.textContent = text;
@@ -180,10 +204,74 @@ function monitorOption(value, text) {
 async function fillPlayerSettings(settings) {
   const choices = playerMonitorChoices(await availableMonitors(), settings.playerMonitor);
   playerMonitorSelect.replaceChildren(
-    monitorOption("", MAIN_WINDOW_MONITOR_TEXT),
-    ...choices.map((choice) => monitorOption(choice.name, choice.label)),
+    choiceOption("", MAIN_WINDOW_MONITOR_TEXT),
+    ...choices.map((choice) => choiceOption(choice.name, choice.label)),
   );
   playerMonitorSelect.value = settings.playerMonitor ?? "";
+  await fillPlayerControls(settings);
+}
+
+function showBrightness() {
+  playerFields.brightnessValue.value = Number(playerFields.brightness.value).toFixed(BRIGHTNESS_DECIMALS);
+}
+
+function enableSubtitleColour() {
+  playerFields.subtitleColour.disabled = !playerFields.subtitleColourOverridden.checked;
+}
+
+async function fillPlayerControls({ playerPicture, playerSound, playerSubtitles }) {
+  playerFields.brightness.value = playerPicture.brightness;
+  showBrightness();
+  playerFields.maskTop.value = playerPicture.masksPercent.top;
+  playerFields.maskBottom.value = playerPicture.masksPercent.bottom;
+  playerFields.maskLeft.value = playerPicture.masksPercent.left;
+  playerFields.maskRight.value = playerPicture.masksPercent.right;
+  playerFields.scaling.value = playerPicture.scaling;
+  const devices = soundDeviceChoices(await invoke("preview_sound_devices"), playerSound.device);
+  playerFields.soundDevice.replaceChildren(
+    choiceOption("", DEFAULT_SOUND_DEVICE_TEXT),
+    ...devices.map((device) => choiceOption(device.name, device.label)),
+  );
+  playerFields.soundDevice.value = playerSound.device ?? "";
+  playerFields.soundLayout.value = playerSound.layout;
+  playerFields.soundDelayMilliseconds.value = playerSound.delayMilliseconds;
+  playerFields.subtitleOffsetPercent.value = playerSubtitles.offsetPercent;
+  playerFields.subtitleColourOverridden.checked = playerSubtitles.colour !== null;
+  playerFields.subtitleColour.value = playerSubtitles.colour ?? DEFAULT_SUBTITLE_COLOUR;
+  enableSubtitleColour();
+}
+
+function playerControlsFromForm() {
+  return playerControlsFromFields({
+    brightness: playerFields.brightness.value,
+    maskTop: playerFields.maskTop.value,
+    maskBottom: playerFields.maskBottom.value,
+    maskLeft: playerFields.maskLeft.value,
+    maskRight: playerFields.maskRight.value,
+    scaling: playerFields.scaling.value,
+    soundDevice: playerFields.soundDevice.value,
+    soundLayout: playerFields.soundLayout.value,
+    soundDelayMilliseconds: playerFields.soundDelayMilliseconds.value,
+    subtitleOffsetPercent: playerFields.subtitleOffsetPercent.value,
+    subtitleColourOverridden: playerFields.subtitleColourOverridden.checked,
+    subtitleColour: playerFields.subtitleColour.value,
+  });
+}
+
+async function applyPlayerControls(settings) {
+  for (const [command, args] of playerControlCommands(appliedPlayerControls, settings)) {
+    await invoke(command, args);
+  }
+  const { playerPicture, playerSound, playerSubtitles } = settings;
+  appliedPlayerControls = { playerPicture, playerSound, playerSubtitles };
+}
+
+function showPlayerWarnings(metadata) {
+  const warning = playerWarningText(metadata.warnings);
+  if (warning === shownPlayerWarning) return;
+  if (warning) setStatus(warning);
+  else if (document.getElementById("status-text")?.textContent === shownPlayerWarning) setStatus(READY_STATUS);
+  shownPlayerWarning = warning;
 }
 
 async function showSettings() {
@@ -202,8 +290,9 @@ function reportGpuFailure(gpuFailure) {
   setStatus(`${GPU_UNAVAILABLE_STATUS}: ${gpuFailure}`);
 }
 
-async function applySavedGpuSetting() {
+async function applySavedSettings() {
   const settings = await showSettings();
+  await applyPlayerControls(settings);
   const gpuFailure = await applyGpuSetting(settings);
   if (!gpuFailure) return;
   reportGpuFailure(gpuFailure);
@@ -235,16 +324,22 @@ document.getElementById("settings-form").addEventListener("submit", (event) => {
       ...gpuSettingsFromForm(),
       playerMonitor: playerMonitorSelect.value,
     });
+    Object.assign(settings, playerControlsFromForm());
     const gpuFailure = await applyGpuSetting(settings);
     await invoke("save_settings", { settings: gpuFailure ? { ...settings, gpu: false } : settings });
+    await applyPlayerControls(settings);
     setStatus(SETTINGS_SAVED_STATUS);
     await refreshLibraryFromDisk();
     if (gpuFailure) reportGpuFailure(gpuFailure);
   })();
 });
 
+playerFields.brightness.addEventListener("input", showBrightness);
+playerFields.subtitleColourOverridden.addEventListener("change", enableSubtitleColour);
+watchPreviewMetadata(showPlayerWarnings);
+
 initGpuSettings();
 initPreview();
-reportingErrors(applySavedGpuSetting)();
+reportingErrors(applySavedSettings)();
 refreshLibrary();
 startLibraryPolling();

@@ -11,6 +11,7 @@ import { fullscreenMonitor } from "./player-monitor.js";
 const MAIN_WINDOW_LABEL = "main";
 const HUD_IDLE_TIMEOUT_MS = 3000;
 const HUD_SHOWN_CLASS = "player-hud-shown";
+const CURSOR_HIDDEN_CLASS = "player-cursor-hidden";
 const LEAVE_FULLSCREEN_KEY = "Escape";
 const PLAY_PAUSE_KEY = " ";
 const FULLSCREEN_TOGGLE_KEYS = ["f", "F"];
@@ -19,7 +20,8 @@ const playerWindow = getCurrentWindow();
 const hud = document.getElementById("player-hud");
 const hint = document.getElementById("player-hint");
 let paused = false;
-let pointerOverHud = false;
+// in page coordinates, null once a resize has moved the page under the pointer
+let lastPointer = null;
 let hideTimer = null;
 
 function reportFailure(error) {
@@ -28,14 +30,32 @@ function reportFailure(error) {
 
 function showHud() {
   hud.classList.add(HUD_SHOWN_CLASS);
+  document.body.classList.remove(CURSOR_HIDDEN_CLASS);
   clearTimeout(hideTimer);
   hideTimer = setTimeout(hideHudUnlessHeld, HUD_IDLE_TIMEOUT_MS);
 }
 
+function pointerIsOverHud() {
+  if (!lastPointer) return false;
+  const box = hud.getBoundingClientRect();
+  const insideHorizontally = lastPointer.x >= box.left && lastPointer.x <= box.right;
+  return insideHorizontally && lastPointer.y >= box.top && lastPointer.y <= box.bottom;
+}
+
 function hideHudUnlessHeld() {
   hint.hidden = true;
-  if (paused || pointerOverHud) return;
+  if (paused || pointerIsOverHud()) {
+    hideTimer = setTimeout(hideHudUnlessHeld, HUD_IDLE_TIMEOUT_MS);
+    return;
+  }
   hud.classList.remove(HUD_SHOWN_CLASS);
+  playerWindow
+    .isFullscreen()
+    .then((fullscreen) => {
+      const hudHidden = !hud.classList.contains(HUD_SHOWN_CLASS);
+      document.body.classList.toggle(CURSOR_HIDDEN_CLASS, fullscreen && hudHidden);
+    })
+    .catch(reportFailure);
 }
 
 // currentMonitor() from the window module only answers for the calling window
@@ -44,19 +64,21 @@ function mainWindowMonitor() {
 }
 
 async function enterFullscreen() {
+  hint.hidden = false;
+  showHud();
   const settings = await invoke("load_settings");
   const monitor = fullscreenMonitor(await availableMonitors(), settings.playerMonitor, await mainWindowMonitor());
   await playerWindow.setFullscreenOnMonitor(monitor.position);
-  hint.hidden = false;
-  showHud();
 }
 
-function leaveFullscreen() {
-  playerWindow.setFullscreen(false).catch(reportFailure);
+async function leaveFullscreen() {
+  hint.hidden = true;
+  showHud();
+  await playerWindow.setFullscreen(false);
 }
 
 async function toggleFullscreen() {
-  if (await playerWindow.isFullscreen()) await playerWindow.setFullscreen(false);
+  if (await playerWindow.isFullscreen()) await leaveFullscreen();
   else await enterFullscreen();
 }
 
@@ -67,23 +89,22 @@ window.addEventListener("keydown", (event) => {
     return;
   }
   if (event.key === LEAVE_FULLSCREEN_KEY) {
-    leaveFullscreen();
+    leaveFullscreen().catch(reportFailure);
     return;
   }
   showHud();
   if (FULLSCREEN_TOGGLE_KEYS.includes(event.key)) toggleFullscreen().catch(reportFailure);
 });
-window.addEventListener("mousemove", showHud);
+window.addEventListener("mousemove", (event) => {
+  lastPointer = { x: event.clientX, y: event.clientY };
+  showHud();
+});
+window.addEventListener("resize", () => {
+  lastPointer = null;
+});
 window.addEventListener("dblclick", (event) => {
   if (hud.contains(event.target)) return;
   toggleFullscreen().catch(reportFailure);
-});
-hud.addEventListener("mouseenter", () => {
-  pointerOverHud = true;
-});
-hud.addEventListener("mouseleave", () => {
-  pointerOverHud = false;
-  showHud();
 });
 watchPreviewMetadata((meta) => {
   const nowPaused = Boolean(meta.paused);

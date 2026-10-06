@@ -13,3 +13,16 @@
   margin: 0 0 6px;
   padding-left: 18px;
 }
+.mask-fields {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 4px;
+}
+#set-player-brightness {
+  flex: 1;
+}
+#set-player-brightness-value {
+  min-width: 3em;
+  text-align: right;
+  font-size: 12px;
+}

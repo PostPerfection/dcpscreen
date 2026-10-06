@@ -1,3 +1,4 @@
+use guikit::preview::player_controls::{PictureControls, SoundControls, SubtitleControls};
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 
@@ -7,7 +8,7 @@ pub fn settings_path() -> PathBuf {
     postkit::preferences::config_dir(crate::APP_DIRECTORY_NAME).join(SETTINGS_FILE)
 }
 
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", default)]
 pub struct Settings {
     pub library_roots: Vec<PathBuf>,
@@ -18,6 +19,9 @@ pub struct Settings {
     pub gpu_registration_url: Option<String>,
     // where the player goes full screen, None is the monitor the main window is on
     pub player_monitor: Option<String>,
+    pub player_picture: PictureControls,
+    pub player_sound: SoundControls,
+    pub player_subtitles: SubtitleControls,
 }
 
 impl Settings {
@@ -59,6 +63,7 @@ pub fn save_settings(settings: Settings) -> Result<(), String> {
 mod tests {
     use super::*;
     use crate::test_fixtures::recipient_chain;
+    use guikit::preview::player_controls::{MaskPercents, Scaling, SoundLayout};
 
     #[test]
     fn settings_round_trip_with_a_certificate_that_reads() {
@@ -73,6 +78,25 @@ mod tests {
             gpu_license: Some("licence-token".to_string()),
             gpu_registration_url: Some("https://licence.example/register".to_string()),
             player_monitor: Some("HDMI-1".to_string()),
+            player_picture: PictureControls {
+                brightness: 1.25,
+                masks_percent: MaskPercents {
+                    top: 5.0,
+                    bottom: 5.0,
+                    left: 0.0,
+                    right: 2.5,
+                },
+                scaling: Scaling::Fill,
+            },
+            player_sound: SoundControls {
+                device: Some("HDA Intel PCH".to_string()),
+                layout: SoundLayout::FivePointOne,
+                delay_milliseconds: -40,
+            },
+            player_subtitles: SubtitleControls {
+                offset_percent: 4.0,
+                colour: Some("#ffcc00".to_string()),
+            },
         };
 
         settings.save(&path).unwrap();
@@ -92,6 +116,20 @@ mod tests {
             serde_json::json!("https://licence.example/register")
         );
         assert_eq!(json["playerMonitor"], serde_json::json!("HDMI-1"));
+        assert_eq!(json["playerPicture"]["brightness"], serde_json::json!(1.25));
+        assert_eq!(json["playerPicture"]["scaling"], serde_json::json!("fill"));
+        assert_eq!(
+            json["playerSound"]["layout"],
+            serde_json::json!("fivePointOne")
+        );
+        assert_eq!(
+            json["playerSound"]["delayMilliseconds"],
+            serde_json::json!(-40)
+        );
+        assert_eq!(
+            json["playerSubtitles"]["colour"],
+            serde_json::json!("#ffcc00")
+        );
     }
 
     #[test]
@@ -109,12 +147,21 @@ mod tests {
     }
 
     #[test]
-    fn a_settings_file_written_before_the_player_monitor_loads_on_the_main_monitor() {
+    fn a_settings_file_written_before_the_player_fields_loads_with_the_player_defaults() {
         let directory = tempfile::tempdir().unwrap();
         let path = directory.path().join(SETTINGS_FILE);
         std::fs::write(&path, r#"{"libraryRoots": ["/srv/dcp"], "gpu": true}"#).unwrap();
 
-        assert_eq!(Settings::load(&path).unwrap().player_monitor, None);
+        let settings = Settings::load(&path).unwrap();
+
+        assert_eq!(settings.player_monitor, None);
+        assert_eq!(settings.player_picture.brightness, 1.0);
+        assert_eq!(
+            settings.player_picture.masks_percent,
+            MaskPercents::default()
+        );
+        assert_eq!(settings.player_sound, SoundControls::default());
+        assert_eq!(settings.player_subtitles, SubtitleControls::default());
     }
 
     #[test]
