@@ -51,45 +51,20 @@ test('the lightest scale stays put however far behind', () => {
   assert.equal(scalesOver(seconds(30, playing({ decoder_fps: 5 }))).scales.at(-1), 'quarter');
 });
 
-test('without the capacity field the picker never steps back up', () => {
-  const samples = [...seconds(5.25, playing({ decoder_fps: 20 })), ...seconds(60, playing())];
-  assert.equal(scalesOver(samples).scales.at(-1), 'half');
-  const nulls = [...seconds(5.25, playing({ decoder_fps: 20 })), ...seconds(60, playing({ decode_capacity_fps: null }))];
-  assert.equal(scalesOver(nulls).scales.at(-1), 'half');
-});
-
-test('ten seconds with capacity at 2.2 times the rate step up one place', () => {
-  const samples = [...seconds(5.25, playing({ decoder_fps: 20 })), ...seconds(12, playing({ decode_capacity_fps: RATE * 2.2 }))];
-  const { scales } = scalesOver(samples);
-  assert.equal(at(scales, 5000), 'half');
-  assert.equal(at(scales, 16750), 'half');
-  assert.equal(at(scales, 17000), 'full');
-});
-
-test('capacity just under 2.2 times the rate never steps up', () => {
-  const samples = [...seconds(5.25, playing({ decoder_fps: 20 })), ...seconds(60, playing({ decode_capacity_fps: RATE * 2.1 }))];
+test('the scale never climbs back within a composition, whatever the capacity', () => {
+  const samples = [...seconds(5.25, playing({ decoder_fps: 20 })), ...seconds(60, playing({ decode_capacity_fps: RATE * 40 }))];
   assert.equal(scalesOver(samples).scales.at(-1), 'half');
 });
 
-test('alternating behind and roomy stretches never change the scale faster than the hold', () => {
+test('alternating behind and roomy stretches only ever step down, five seconds or more apart', () => {
   const samples = [];
   for (let round = 0; round < 6; round += 1) {
-    samples.push(...seconds(3.5, playing({ decoder_fps: 20 })), ...seconds(10.5, playing({ decode_capacity_fps: RATE * 3 })));
+    samples.push(...seconds(5.5, playing({ decoder_fps: 20 })), ...seconds(10, playing({ decode_capacity_fps: RATE * 3 })));
   }
-  let state = startPicker(0);
-  let lastChangeAt = 0;
-  let lastScale = state.scale;
-  const gaps = [];
-  samples.forEach((sample, index) => {
-    const now = (index + 1) * SAMPLE_INTERVAL_MS;
-    state = nextPicker(state, sample, now);
-    if (state.scale === lastScale) return;
-    gaps.push(now - lastChangeAt);
-    lastChangeAt = now;
-    lastScale = state.scale;
-  });
-  assert.ok(gaps.length >= 2, `the scale never moved: ${gaps}`);
-  assert.ok(gaps.every((gap) => gap >= 3000), `steps closer than the hold: ${gaps}`);
+  const { scales } = scalesOver(samples);
+  const changes = scales.flatMap((scale, index) => (index > 0 && scale !== scales[index - 1] ? [index] : []));
+  assert.deepEqual(changes.map((index) => scales[index]), ['half', 'quarter']);
+  assert.ok(changes[1] - changes[0] >= 5000 / SAMPLE_INTERVAL_MS, `steps ${changes} too close`);
 });
 
 test('paused, at the end or before the rate is known the timers stop', () => {
@@ -123,70 +98,85 @@ test('drops and a low shown rate while the lookahead refills after a step do not
   assert.ok(scales.slice(21).every((scale) => scale === 'half'), scales.slice(21).join(' '));
 });
 
-test('a scale whose capacity fell short of the rate is never stepped back up to', () => {
-  const samples = [
-    ...seconds(5.25, playing({ decoder_fps: 20, decode_capacity_fps: 19 })),
-    ...seconds(60, playing({ decode_capacity_fps: 78 })),
-  ];
-  assert.equal(scalesOver(samples).scales.at(-1), 'half');
-});
-
-test('a restart forgets the shortfall', () => {
-  const { state } = scalesOver([
-    ...seconds(5.25, playing({ decoder_fps: 20, decode_capacity_fps: 19 })),
-    ...seconds(1, playing({ decode_capacity_fps: 78 })),
-  ]);
-  assert.deepEqual(state.capacityByScale, { full: 19, half: 78 });
-  assert.deepEqual(startPicker(10000).capacityByScale, {});
-});
-
-// what the grok player reported playing the 4K Sched4 DCP on this laptop's CPU, one row per second at each scale
-const SCHED4_MEASURED = {
-  full: {
-    capacity: [null, 13.0, 14.3, 17.4, 18.4, 18.3, 19.3, 19.2],
-    shown: [null, 101.3, 6.1, 7.2, 8.0, 10.6, 13.6, 13.7],
-    notDecoded: [0, 13, 23, 41, 51, 56, 60, 66],
-  },
-  half: {
-    capacity: [46.7, 63.8, 79.0, 77.4, 77.9, 77.4, 77.3, 80.4],
-    shown: [30.1, 23.4, 23.4, 23.4, 23.5, 23.5, 23.4, 23.5],
-    notDecoded: [5, 5, 5, 5, 5, 5, 5, 5],
-  },
-  quarter: {
-    capacity: [171.8, 217.8, 211.0, 207.5, 206.1, 206.7, 207.4, 213.6],
-    shown: [24.7, 23.5, 23.4, 23.4, 23.5, 23.4, 23.4, 23.5],
-    notDecoded: [3, 3, 3, 3, 3, 3, 3, 3],
-  },
-};
-
-// the reading at a scale some time after the player started decoding at it, the last row repeating
-function sched4Sample(scale, millisecondsAtScale, notDecodedBefore) {
-  const rows = SCHED4_MEASURED[scale];
-  const row = Math.min(Math.floor(millisecondsAtScale / 1000), rows.capacity.length - 1);
-  return playing({
-    decode_capacity_fps: rows.capacity[row],
-    decoder_fps: rows.shown[row],
-    dropped_frames_not_decoded: notDecodedBefore + rows.notDecoded[row],
-  });
-}
-
-test('the measured 4K Sched4 readings settle at half and stay there', () => {
+// one row per second at each scale, the last repeating while the drop count rises by notDecodedPerSecond
+function replay(measured, durationMs) {
   let state = startPicker(0);
   let scaleSince = 0;
   let notDecodedBefore = 0;
-  let lastNotDecoded = 0;
   const scales = [];
-  for (let now = 0; now <= 120000; now += SAMPLE_INTERVAL_MS) {
-    const sample = sched4Sample(state.scale, now - scaleSince, notDecodedBefore);
-    lastNotDecoded = sample.dropped_frames_not_decoded;
+  for (let now = 0; now <= durationMs; now += SAMPLE_INTERVAL_MS) {
+    const rows = measured[state.scale];
+    const secondsAtScale = Math.floor((now - scaleSince) / 1000);
+    const row = Math.min(secondsAtScale, rows.capacity.length - 1);
+    const beyond = secondsAtScale - row;
+    const dropped = notDecodedBefore + rows.notDecoded[row] + beyond * rows.notDecodedPerSecond;
+    const sample = playing({ decode_capacity_fps: rows.capacity[row], decoder_fps: rows.shown[row], dropped_frames_not_decoded: dropped });
     const scale = state.scale;
     state = nextPicker(state, sample, now);
     scales.push(state.scale);
     if (state.scale === scale) continue;
     scaleSince = now;
-    notDecodedBefore = lastNotDecoded;
+    notDecodedBefore = dropped;
   }
-  const firstHalf = scales.indexOf('half');
-  assert.ok(firstHalf > 0, 'never stepped down from full');
-  assert.ok(scales.slice(firstHalf).every((scale) => scale === 'half'), `left half: ${[...new Set(scales.slice(firstHalf))]}`);
+  return scales;
+}
+
+const TWO_MINUTES_MS = 120000;
+
+// the 4K Sched4 DCP on this laptop's CPU, the bare player with no window drawing
+const SCHED4_BARE_PLAYER = {
+  full: {
+    capacity: [null, 13.0, 14.3, 17.4, 18.4, 18.3, 19.3, 19.2],
+    shown: [null, 101.3, 6.1, 7.2, 8.0, 10.6, 13.6, 13.7],
+    notDecoded: [0, 13, 23, 41, 51, 56, 60, 66],
+    notDecodedPerSecond: 6,
+  },
+  half: {
+    capacity: [46.7, 63.8, 79.0, 77.4, 77.9, 77.4, 77.3, 80.4],
+    shown: [30.1, 23.4, 23.4, 23.4, 23.5, 23.5, 23.4, 23.5],
+    notDecoded: [5, 5, 5, 5, 5, 5, 5, 5],
+    notDecodedPerSecond: 0,
+  },
+  quarter: {
+    capacity: [171.8, 217.8, 211.0, 207.5, 206.1, 206.7, 207.4, 213.6],
+    shown: [24.7, 23.5, 23.4, 23.4, 23.5, 23.4, 23.4, 23.5],
+    notDecoded: [3, 3, 3, 3, 3, 3, 3, 3],
+    notDecodedPerSecond: 0,
+  },
+};
+
+// the same DCP in the app under Xvfb, where software GL drawing halves the decode capacity
+const SCHED4_IN_THE_APP = {
+  full: {
+    capacity: [null, 10.1, 11.5, 11.5],
+    shown: [null, 17.2, 4.8, 5.8],
+    notDecoded: [0, 12, 23, 40],
+    notDecodedPerSecond: 10,
+  },
+  half: {
+    capacity: [null, 39.8, 39.8, 39.5, 39.5, 39.4],
+    shown: [26.3, 26.3, 27.1, 27.1, 27.1, 27.1],
+    notDecoded: [0, 7, 13, 20, 27, 33],
+    notDecodedPerSecond: 7,
+  },
+  quarter: {
+    capacity: [null, 139.7, 171.5, 170.7],
+    shown: [23.4, 23.4, 23.4, 23.5],
+    notDecoded: [0, 0, 0, 0],
+    notDecodedPerSecond: 0,
+  },
+};
+
+function settlesAt(scales, expected) {
+  const first = scales.indexOf(expected);
+  assert.ok(first > 0, `never reached ${expected}: ${[...new Set(scales)]}`);
+  assert.ok(scales.slice(first).every((scale) => scale === expected), `left ${expected}: ${[...new Set(scales.slice(first))]}`);
+}
+
+test('the bare player readings of the 4K Sched4 DCP settle at half and stay there', () => {
+  settlesAt(replay(SCHED4_BARE_PLAYER, TWO_MINUTES_MS), 'half');
+});
+
+test('the in-app readings, where half falls behind with capacity to spare, settle at quarter and stay there', () => {
+  settlesAt(replay(SCHED4_IN_THE_APP, TWO_MINUTES_MS), 'quarter');
 });
