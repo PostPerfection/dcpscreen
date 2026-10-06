@@ -4,6 +4,7 @@ import { initPreview, previewFile } from "../../extern/guikit/src/preview.js";
 import { initJobsPanel, refreshJobs, startJobsPolling, stopJobsPolling } from "../../extern/guikit/src/jobs.js";
 import { initLibraryPanel, refreshLibrary } from "../../extern/guikit/src/library.js";
 import { initKeysPanel, refreshKeys } from "../../extern/guikit/src/keys.js";
+import { initGpuSettings, fillGpuSettings, gpuSettingsFromForm, uncheckGpu, applyGpuSetting } from "../../extern/guikit/src/gpu-settings.js";
 import { settingsFromFields, withLibraryRoot, withoutLibraryRoot } from "./settings-form.js";
 import { playRefusalText } from "./play-refusal.js";
 
@@ -13,6 +14,7 @@ const PRIVATE_KEY_FILTERS = [{ name: "Private key", extensions: ["pem", "key"] }
 const PLAY_SOURCE_READY = "ready";
 const PLAY_REFUSAL_TITLE = "No KDM fits";
 const SETTINGS_SAVED_STATUS = "Settings saved";
+const GPU_UNAVAILABLE_STATUS = "GPU decoding unavailable";
 const LIBRARY_POLL_INTERVAL_MS = 3000;
 const REMOVE_ROOT_TEXT = "✕";
 
@@ -149,7 +151,22 @@ async function showSettings() {
   libraryRoots = settings.libraryRoots;
   certificateInput.value = settings.recipientCertificate ?? "";
   privateKeyInput.value = settings.recipientKey ?? "";
+  fillGpuSettings(settings);
   renderLibraryRoots();
+  return settings;
+}
+
+function reportGpuFailure(gpuFailure) {
+  uncheckGpu();
+  setStatus(`${GPU_UNAVAILABLE_STATUS}: ${gpuFailure}`);
+}
+
+async function applySavedGpuSetting() {
+  const settings = await showSettings();
+  const gpuFailure = await applyGpuSetting(settings);
+  if (!gpuFailure) return;
+  reportGpuFailure(gpuFailure);
+  await invoke("save_settings", { settings: { ...settings, gpu: false } });
 }
 
 async function browseInto(input, filters) {
@@ -174,14 +191,18 @@ document.getElementById("settings-form").addEventListener("submit", (event) => {
       libraryRoots,
       recipientCertificate: certificateInput.value,
       recipientKey: privateKeyInput.value,
+      ...gpuSettingsFromForm(),
     });
-    await invoke("save_settings", { settings });
+    const gpuFailure = await applyGpuSetting(settings);
+    await invoke("save_settings", { settings: gpuFailure ? { ...settings, gpu: false } : settings });
     setStatus(SETTINGS_SAVED_STATUS);
     await refreshLibraryFromDisk();
+    if (gpuFailure) reportGpuFailure(gpuFailure);
   })();
 });
 
+initGpuSettings();
 initPreview();
-reportingErrors(showSettings)();
+reportingErrors(applySavedGpuSetting)();
 refreshLibrary();
 startLibraryPolling();

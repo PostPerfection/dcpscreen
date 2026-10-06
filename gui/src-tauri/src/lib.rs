@@ -75,6 +75,7 @@ pub fn run() {
             guikit::preview::preview_set_decode_scale,
             guikit::preview::preview_set_subtitle_file,
             guikit::preview::preview_set_subtitle_visibility,
+            guikit::gpu::set_gpu,
             settings::load_settings,
             settings::save_settings,
             library::library_list,

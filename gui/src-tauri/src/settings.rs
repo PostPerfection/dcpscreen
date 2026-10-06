@@ -13,6 +13,9 @@ pub struct Settings {
     pub library_roots: Vec<PathBuf>,
     pub recipient_certificate: Option<PathBuf>,
     pub recipient_key: Option<PathBuf>,
+    pub gpu: bool,
+    pub gpu_license: Option<String>,
+    pub gpu_registration_url: Option<String>,
 }
 
 impl Settings {
@@ -64,6 +67,9 @@ mod tests {
             library_roots: vec![PathBuf::from("/srv/dcp")],
             recipient_certificate: Some(chain.certificate.clone()),
             recipient_key: Some(chain.key.clone()),
+            gpu: true,
+            gpu_license: Some("licence-token".to_string()),
+            gpu_registration_url: Some("https://licence.example/register".to_string()),
         };
 
         settings.save(&path).unwrap();
@@ -76,6 +82,26 @@ mod tests {
             json["recipientCertificate"],
             serde_json::json!(chain.certificate.display().to_string())
         );
+        assert_eq!(json["gpu"], serde_json::json!(true));
+        assert_eq!(json["gpuLicense"], serde_json::json!("licence-token"));
+        assert_eq!(
+            json["gpuRegistrationUrl"],
+            serde_json::json!("https://licence.example/register")
+        );
+    }
+
+    #[test]
+    fn a_settings_file_written_before_the_gpu_fields_loads_with_the_gpu_off() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join(SETTINGS_FILE);
+        std::fs::write(&path, r#"{"libraryRoots": ["/srv/dcp"]}"#).unwrap();
+
+        let settings = Settings::load(&path).unwrap();
+
+        assert_eq!(settings.library_roots, vec![PathBuf::from("/srv/dcp")]);
+        assert!(!settings.gpu);
+        assert_eq!(settings.gpu_license, None);
+        assert_eq!(settings.gpu_registration_url, None);
     }
 
     #[test]

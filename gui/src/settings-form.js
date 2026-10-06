@@ -1,8 +1,18 @@
-export function settingsFromFields({ libraryRoots, recipientCertificate, recipientKey }) {
+export function settingsFromFields({
+  libraryRoots,
+  recipientCertificate,
+  recipientKey,
+  gpu,
+  gpuLicense,
+  gpuRegistrationUrl,
+}) {
   return {
     libraryRoots,
     recipientCertificate: recipientCertificate || null,
     recipientKey: recipientKey || null,
+    gpu,
+    gpuLicense: gpuLicense || null,
+    gpuRegistrationUrl: gpuRegistrationUrl || null,
   };
 }
 

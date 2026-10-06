@@ -2,10 +2,24 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { settingsFromFields, withLibraryRoot, withoutLibraryRoot } from '../src/settings-form.js';
 
-test('empty recipient fields are saved as unset', () => {
+test('empty recipient and GPU text fields are saved as unset', () => {
   assert.deepEqual(
-    settingsFromFields({ libraryRoots: ['/srv/dcp'], recipientCertificate: '', recipientKey: '/keys/leaf.key' }),
-    { libraryRoots: ['/srv/dcp'], recipientCertificate: null, recipientKey: '/keys/leaf.key' },
+    settingsFromFields({
+      libraryRoots: ['/srv/dcp'],
+      recipientCertificate: '',
+      recipientKey: '/keys/leaf.key',
+      gpu: true,
+      gpuLicense: '',
+      gpuRegistrationUrl: 'https://licence.example/register',
+    }),
+    {
+      libraryRoots: ['/srv/dcp'],
+      recipientCertificate: null,
+      recipientKey: '/keys/leaf.key',
+      gpu: true,
+      gpuLicense: null,
+      gpuRegistrationUrl: 'https://licence.example/register',
+    },
   );
 });
 

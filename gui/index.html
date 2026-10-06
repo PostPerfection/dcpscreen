@@ -131,6 +131,23 @@
                   </div>
                 </div>
               </fieldset>
+              <fieldset>
+                <legend>Decoding</legend>
+                <div class="prop-field">
+                  <label><input type="checkbox" id="set-gpu"> Decode on the GPU (grok accelerator plugin)</label>
+                </div>
+                <div class="prop-field">
+                  <label for="set-gpu-license">Grok License</label>
+                  <div class="input-with-btn">
+                    <input type="password" id="set-gpu-license" autocomplete="off" spellcheck="false">
+                    <button type="button" id="set-gpu-license-show" class="btn-sm">Show</button>
+                  </div>
+                </div>
+                <div class="prop-field">
+                  <label for="set-gpu-registration-url">Registration URL</label>
+                  <input type="url" id="set-gpu-registration-url" placeholder="Use the plugin default" spellcheck="false">
+                </div>
+              </fieldset>
               <div class="form-actions">
                 <button type="submit" class="btn-primary">Save</button>
               </div>
@@ -144,6 +161,7 @@
       <div class="preview-panel" id="preview-panel" hidden>
         <div class="preview-panel-header">
           <span id="preview-title">Preview</span>
+          <button id="preview-fullscreen" class="btn-sm" title="Full screen (Escape exits)">⛶</button>
           <button id="preview-close" class="btn-sm" title="Close preview">✕</button>
         </div>
         <div class="preview-surface" id="preview-surface"></div>
