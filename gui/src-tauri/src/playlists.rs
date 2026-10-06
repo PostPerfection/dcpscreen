@@ -6,7 +6,6 @@ use postkit::screening_playlist::{
     plan, CompositionLength, PlaylistPlan, ScreeningPlaylist, PLAYLIST_FORMAT_VERSION,
 };
 use std::path::{Path, PathBuf};
-use tauri::Manager;
 
 const PLAYLISTS_DIRECTORY: &str = "playlists";
 const PLAYLIST_EXTENSION: &str = "json";
@@ -120,9 +119,7 @@ pub fn playlist_play(
     runner.start(
         playlist,
         from_row,
-        Box::new(move |directory, cpl_id| {
-            row_source(&lookup_app.state::<LibraryState>(), directory, cpl_id)
-        }),
+        Box::new(move |directory, cpl_id| row_source(&lookup_app, directory, cpl_id)),
     )
 }
 

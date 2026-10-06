@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { settingsFromFields, withLibraryRoot, withoutLibraryRoot } from '../src/settings-form.js';
 
-test('empty recipient, GPU and player monitor fields are saved as unset', () => {
+test('empty recipient, GPU and player monitor fields are saved as unset, and the HDCP box as it is', () => {
   assert.deepEqual(
     settingsFromFields({
       libraryRoots: ['/srv/dcp'],
@@ -12,6 +12,7 @@ test('empty recipient, GPU and player monitor fields are saved as unset', () => 
       gpuLicense: '',
       gpuRegistrationUrl: 'https://licence.example/register',
       playerMonitor: '',
+      requireHdcp: true,
     }),
     {
       libraryRoots: ['/srv/dcp'],
@@ -21,6 +22,7 @@ test('empty recipient, GPU and player monitor fields are saved as unset', () => 
       gpuLicense: null,
       gpuRegistrationUrl: 'https://licence.example/register',
       playerMonitor: null,
+      requireHdcp: true,
     },
   );
 });

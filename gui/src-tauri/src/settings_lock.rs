@@ -530,4 +530,21 @@ mod tests {
         assert_eq!(error, LOCKED_ERROR);
         assert_eq!(std::fs::read_to_string(&lock.path).unwrap(), before);
     }
+
+    #[test]
+    fn turning_the_hdcp_requirement_off_is_refused_while_locked() {
+        let directory = tempfile::tempdir().unwrap();
+        let lock = SettingsLock::new(directory.path().join(SETTINGS_FILE));
+        lock.save_settings(Settings {
+            require_hdcp: true,
+            ..Default::default()
+        })
+        .unwrap();
+        lock.set_password(PASSWORD, PASSWORD).unwrap();
+
+        let error = lock.save_settings(Settings::default()).unwrap_err();
+
+        assert_eq!(error, LOCKED_ERROR);
+        assert!(lock.load_settings().unwrap().settings.require_hdcp);
+    }
 }

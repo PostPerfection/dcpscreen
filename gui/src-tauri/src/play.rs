@@ -8,6 +8,7 @@ use postkit::kdm_store::{KdmFit, KdmStore};
 use postkit::package_library::Library;
 use serde::Serialize;
 use std::path::{Path, PathBuf};
+use tauri::Manager;
 
 const NO_RECIPIENT_KEY_MESSAGE: &str =
     "an encrypted composition needs the recipient key, set it in Settings";
@@ -108,41 +109,43 @@ pub fn play_source(
     Ok(PlaySource::NoKdmFits { kdms })
 }
 
-// with the settings and the KDM store as they are now
+// with the settings and the KDM store as they are now, refused when the output lacks HDCP it needs
 fn play_source_now(
-    library: &LibraryState,
+    app: &tauri::AppHandle,
     directory: &Path,
     cpl_id: uuid::Uuid,
 ) -> Result<PlaySource, String> {
     let settings = Settings::load(&settings_path())?;
     let store = load_store(&kdm_store_directory());
-    play_source(
-        &library.lock(),
+    let source = play_source(
+        &app.state::<LibraryState>().lock(),
         &store,
         &settings,
         directory,
         cpl_id,
         chrono::Utc::now(),
-    )
+    )?;
+    crate::hdcp::admit(app, &settings, &source)?;
+    Ok(source)
 }
 
 #[tauri::command(async)]
 pub fn library_play(
     directory: PathBuf,
     cpl_id: String,
-    library: tauri::State<'_, LibraryState>,
+    app: tauri::AppHandle,
 ) -> Result<PlaySource, String> {
     let cpl_id = uuid::Uuid::parse_str(&cpl_id).map_err(|error| format!("{cpl_id}: {error}"))?;
-    play_source_now(&library, &directory, cpl_id)
+    play_source_now(&app, &directory, cpl_id)
 }
 
 // a playlist row picks its KDM when it loads, so a KDM ingested during the show counts
 pub fn row_source(
-    library: &LibraryState,
+    app: &tauri::AppHandle,
     directory: &Path,
     cpl_id: uuid::Uuid,
 ) -> Result<RowSource, String> {
-    row_source_from(play_source_now(library, directory, cpl_id)?)
+    row_source_from(play_source_now(app, directory, cpl_id)?)
 }
 
 fn row_source_from(source: PlaySource) -> Result<RowSource, String> {

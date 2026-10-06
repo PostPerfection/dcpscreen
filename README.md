@@ -48,6 +48,14 @@ Settings are kept in `~/.config/dcpscreen/settings.json`. The library (`library.
 
 A playlist runs compositions and intermissions in order. A composition row can play part of its composition, from its In timecode to the frame before its Out timecode. A composition that follows another composition plays straight on with no black frame between them. An intermission stops the picture and holds black or its still image for its length. A row with a start time waits on black until that local time when the row before ends earlier, and starts late, with a warning on the Playlist view, when the row before ends after it. The KDM for an encrypted composition is picked from the store when the row loads. Playing a composition from the library, Stop or closing the player window ends the playlist. The log lines start with `[playlist]`.
 
+## HDCP
+
+"Require HDCP for encrypted content" reads the DRM "Content Protection" property of the output the player window is on, from `/dev/dri/card*` as the logged in user, and plays encrypted content only when it reads Enabled. Only the compositor can turn HDCP on, and GNOME and KDE never do, so on those desktops the setting blocks every encrypted composition. nvidia-drm has no Content Protection property, so its outputs count as not protected.
+
+The output is found by matching the monitor name GDK gives the player window against each connected connector under `/sys/class/drm`: the connector name (`DP-9`, what GDK reports on X11) or the model from the connector's EDID (the product name, or the product code as `0x0a9b`, what mutter reports on Wayland). Several connected monitors of the same model must all read Enabled. When no connector matches, the output counts as not protected.
+
+`cargo test -- --ignored` runs a test that reads the property from every amdgpu connector on the machine. It is ignored by default because GitHub runners have no `/dev/dri`.
+
 ## Settings lock
 
 Settings has "Lock settings with a password", with a minimum of 8 characters. While a password is set and the session is locked, saving settings, adding or removing a KDM and removing a package from the library are refused, while playing, verifying and browsing stay open. The lock keeps projectionists from changing settings in the app. It does not protect against anyone who can edit the user's files.

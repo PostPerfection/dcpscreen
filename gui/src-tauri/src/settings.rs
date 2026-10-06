@@ -26,6 +26,8 @@ pub struct Settings {
     pub player_subtitles: SubtitleControls,
     // a monitor ICC profile for DCP pictures, None is the built-in sRGB
     pub player_display_profile: Option<PathBuf>,
+    // encrypted content plays only on an output whose HDCP reads Enabled
+    pub require_hdcp: bool,
 }
 
 impl Settings {
@@ -144,6 +146,7 @@ mod tests {
                 colour: Some("#ffcc00".to_string()),
             },
             player_display_profile: Some(PathBuf::from("/usr/share/color/icc/booth.icc")),
+            require_hdcp: true,
         };
 
         SettingsFile {
@@ -182,6 +185,7 @@ mod tests {
             json["playerSubtitles"]["colour"],
             serde_json::json!("#ffcc00")
         );
+        assert_eq!(json["requireHdcp"], serde_json::json!(true));
         assert_eq!(
             json["playerDisplayProfile"],
             serde_json::json!("/usr/share/color/icc/booth.icc")
@@ -219,6 +223,7 @@ mod tests {
         assert_eq!(settings.player_sound, SoundControls::default());
         assert_eq!(settings.player_subtitles, SubtitleControls::default());
         assert_eq!(settings.player_display_profile, None);
+        assert!(!settings.require_hdcp);
     }
 
     #[test]

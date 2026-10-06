@@ -37,6 +37,7 @@ const PLAYER_WINDOW_MINIMUM_HEIGHT: f64 = 180.0;
 const PLAYER_CLOSE_REQUESTED_EVENT: &str = "player-close-requested";
 
 mod display_profiles;
+mod hdcp;
 mod keys;
 mod library;
 mod play;
@@ -104,6 +105,7 @@ pub fn run() {
             guikit::preview::player_controls::preview_sound_devices,
             guikit::preview::player_controls::preview_set_display_profile,
             display_profiles::display_profiles,
+            hdcp::hdcp_supported,
             guikit::gpu::set_gpu,
             settings::load_settings,
             settings::save_settings,
@@ -173,6 +175,8 @@ pub fn run() {
                 app.handle().clone(),
             ));
             app.manage(verify_jobs::start_worker(app.handle().clone()));
+            app.manage(hdcp::EncryptedSources::default());
+            hdcp::start_recheck(app.handle().clone());
             Ok(())
         })
         .on_window_event(|window, event| match (window.label(), event) {

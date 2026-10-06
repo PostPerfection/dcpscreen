@@ -31,6 +31,8 @@ argon2 = "0.6.0"
 [target.'cfg(target_os = "linux")'.dependencies]
 # asks colord for the profiles of a display, tao already links it
 dbus = "0.9"
+# reads each connector's HDCP Content Protection property
+drm = "0.15"
 
 [dev-dependencies]
 tempfile = "3"

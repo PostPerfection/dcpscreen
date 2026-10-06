@@ -66,6 +66,11 @@ const SET_OUT_TITLE = "End the row before the frame on screen";
 const MOVE_DOWN = 1;
 const PLAY_SOURCE_READY = "ready";
 const PLAY_REFUSAL_TITLE = "No KDM fits";
+const PLAY_SOURCE_REFUSED = "refused";
+const NOT_PLAYED_TITLE = "Not played";
+const PLAYBACK_STOPPED_TITLE = "Playback stopped";
+// the backend stopped an encrypted composition the output no longer protects
+const HDCP_STOPPED_EVENT = "hdcp-stopped";
 const SETTINGS_SAVED_STATUS = "Settings saved";
 const GPU_UNAVAILABLE_STATUS = "GPU decoding unavailable";
 const LIBRARY_POLL_INTERVAL_MS = 3000;
@@ -86,6 +91,7 @@ const certificateInput = document.getElementById("set-recipient-certificate");
 const privateKeyInput = document.getElementById("set-recipient-key");
 const libraryRootsList = document.getElementById("set-library-roots");
 const playerMonitorSelect = document.getElementById("set-player-monitor");
+const requireHdcpCheckbox = document.getElementById("set-require-hdcp");
 const playerFields = {
   brightness: document.getElementById("set-player-brightness"),
   brightnessValue: document.getElementById("set-player-brightness-value"),
@@ -206,15 +212,22 @@ async function stopPlayback() {
   await playerWindow.hide();
 }
 
+// the window shows first, so the HDCP check reads the output it is on
 async function playComposition(libraryPackage, composition) {
-  const source = await invoke("library_play", { directory: libraryPackage.directory, cplId: composition.id });
-  if (source.kind !== PLAY_SOURCE_READY) {
-    await message(playRefusalText(composition.title, source.kdms), { title: PLAY_REFUSAL_TITLE, kind: "warning" });
-    return;
-  }
   await invoke("playlist_stop");
   await showPlayerWindow();
-  await previewFile(source.cplPath, source.contentKeys, source.otherPackages);
+  const source = await invoke("library_play", { directory: libraryPackage.directory, cplId: composition.id })
+    .catch((error) => ({ kind: PLAY_SOURCE_REFUSED, error }));
+  if (source.kind === PLAY_SOURCE_READY) {
+    await previewFile(source.cplPath, source.contentKeys, source.otherPackages);
+    return;
+  }
+  await playerWindow.hide();
+  if (source.kind === PLAY_SOURCE_REFUSED) {
+    await message(String(source.error), { title: NOT_PLAYED_TITLE, kind: "warning" });
+    return;
+  }
+  await message(playRefusalText(composition.title, source.kdms), { title: PLAY_REFUSAL_TITLE, kind: "warning" });
 }
 
 const playlistFields = {
@@ -406,6 +419,15 @@ initLibraryPanel({
 document.getElementById("library-refresh").addEventListener("click", reportingErrors(refreshLibraryFromDisk));
 document.getElementById("player-stop-btn").addEventListener("click", reportingErrors(stopPlayback));
 listen(PLAYER_CLOSE_REQUESTED_EVENT, reportingErrors(stopPlayback));
+listen(HDCP_STOPPED_EVENT, reportingErrors(async (event) => {
+  await stopPlayback();
+  setStatus(event.payload);
+  await message(event.payload, { title: PLAYBACK_STOPPED_TITLE, kind: "warning" });
+}));
+if (!(await invoke("hdcp_supported"))) {
+  requireHdcpCheckbox.disabled = true;
+  document.getElementById("set-require-hdcp-unsupported").hidden = false;
+}
 
 async function ingestKdm() {
   const path = await open({ filters: KDM_FILTERS });
@@ -557,6 +579,7 @@ async function showSettings() {
   certificateInput.value = settings.recipientCertificate ?? "";
   privateKeyInput.value = settings.recipientKey ?? "";
   fillGpuSettings(settings);
+  requireHdcpCheckbox.checked = settings.requireHdcp;
   renderLibraryRoots();
   await fillPlayerSettings(settings);
   return settings;
@@ -601,6 +624,7 @@ document.getElementById("settings-form").addEventListener("submit", (event) => {
       recipientKey: privateKeyInput.value,
       ...gpuSettingsFromForm(),
       playerMonitor: playerMonitorSelect.value,
+      requireHdcp: requireHdcpCheckbox.checked,
     });
     Object.assign(settings, playerControlsFromForm());
     if (!(await displayProfileAccepted(settings.playerDisplayProfile))) return;

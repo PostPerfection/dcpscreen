@@ -6,6 +6,7 @@ export function settingsFromFields({
   gpuLicense,
   gpuRegistrationUrl,
   playerMonitor,
+  requireHdcp,
 }) {
   return {
     libraryRoots,
@@ -15,6 +16,7 @@ export function settingsFromFields({
     gpuLicense: gpuLicense || null,
     gpuRegistrationUrl: gpuRegistrationUrl || null,
     playerMonitor: playerMonitor || null,
+    requireHdcp,
   };
 }
 
