@@ -2,19 +2,38 @@ import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { Window, availableMonitors } from "@tauri-apps/api/window";
 import { open, message } from "@tauri-apps/plugin-dialog";
-import { initPreview, previewFile, stopPreview, watchPreviewMetadata } from "../../extern/guikit/src/preview.js";
+import { enablePreviewTransport, initPreview, previewFile, stopPreview, watchPreviewMetadata } from "../../extern/guikit/src/preview.js";
 import { initJobsPanel, refreshJobs, startJobsPolling, stopJobsPolling } from "../../extern/guikit/src/jobs.js";
 import { initLibraryPanel, refreshLibrary } from "../../extern/guikit/src/library.js";
 import { initKeysPanel, refreshKeys } from "../../extern/guikit/src/keys.js";
 import { initGpuSettings, fillGpuSettings, gpuSettingsFromForm, uncheckGpu, applyGpuSetting } from "../../extern/guikit/src/gpu-settings.js";
 import { settingsFromFields, withLibraryRoot, withoutLibraryRoot } from "./settings-form.js";
 import { playRefusalText } from "./play-refusal.js";
+import {
+  displayTime,
+  newPlaylist,
+  rowTitle,
+  runnerStatusText,
+  warningText,
+  withComposition,
+  withIntermission,
+  withRowMoved,
+  withStartTime,
+  withoutRow,
+} from "./screening-playlist.js";
 import { playerMonitorChoices } from "./player-monitor.js";
 import { playerControlCommands, playerControlsFromFields, playerWarningText, soundDeviceChoices } from "./player-controls.js";
 
 const KDM_FILTERS = [{ name: "KDM", extensions: ["xml"] }];
 const CERTIFICATE_FILTERS = [{ name: "Certificate", extensions: ["pem", "crt"] }];
 const PRIVATE_KEY_FILTERS = [{ name: "Private key", extensions: ["pem", "key"] }];
+const STILL_IMAGE_FILTERS = [{ name: "Image", extensions: ["png", "jpg", "jpeg"] }];
+const DEFAULT_PLAYLIST_NAME = "Playlist";
+const PLAYLIST_SAVED_STATUS = "Playlist saved";
+const PLAYLIST_POLL_INTERVAL_MS = 1000;
+const SECONDS_PER_MINUTE = 60;
+const MOVE_UP = -1;
+const MOVE_DOWN = 1;
 const PLAY_SOURCE_READY = "ready";
 const PLAY_REFUSAL_TITLE = "No KDM fits";
 const SETTINGS_SAVED_STATUS = "Settings saved";
@@ -106,6 +125,10 @@ document.querySelectorAll(".sidebar-btn[data-view]").forEach((btn) => {
     if (view) view.classList.add("active");
     if (btn.dataset.view === "keys") reportingErrors(refreshKeys)();
     if (btn.dataset.view === "settings") reportingErrors(showSettings)();
+    if (btn.dataset.view === "playlist") reportingErrors(async () => {
+      await refreshSavedPlaylists();
+      await renderPlaylist();
+    })();
     if (btn.dataset.view === "library") {
       refreshLibrary();
       startLibraryPolling();
@@ -146,6 +169,7 @@ async function showPlayerWindow() {
 }
 
 async function stopPlayback() {
+  await invoke("playlist_stop");
   stopPreview();
   await playerWindow.hide();
 }
@@ -156,9 +180,120 @@ async function playComposition(libraryPackage, composition) {
     await message(playRefusalText(composition.title, source.kdms), { title: PLAY_REFUSAL_TITLE, kind: "warning" });
     return;
   }
+  await invoke("playlist_stop");
   await showPlayerWindow();
   await previewFile(source.cplPath, source.contentKeys);
 }
+
+const playlistFields = {
+  name: document.getElementById("playlist-name"),
+  saved: document.getElementById("playlist-saved"),
+  rows: document.getElementById("playlist-tbody"),
+  warnings: document.getElementById("playlist-warnings"),
+  runnerStatus: document.getElementById("playlist-runner-status"),
+  intermissionMinutes: document.getElementById("playlist-intermission-minutes"),
+  intermissionStill: document.getElementById("playlist-intermission-still"),
+};
+let currentPlaylist = newPlaylist(DEFAULT_PLAYLIST_NAME);
+
+function rowButton(text, title, onClick) {
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = "btn-sm";
+  button.textContent = text;
+  button.title = title;
+  button.addEventListener("click", reportingErrors(onClick));
+  return button;
+}
+
+function cell(...children) {
+  const td = document.createElement("td");
+  td.append(...children);
+  return td;
+}
+
+function playlistRowElement(row, index, expectedStart) {
+  const startTime = document.createElement("input");
+  startTime.type = "datetime-local";
+  startTime.step = "1";
+  startTime.value = row.startTime ?? "";
+  startTime.addEventListener("change", reportingErrors(() => editPlaylist(withStartTime(currentPlaylist, index, startTime.value))));
+  const actions = [
+    rowButton("↑", "Move up", () => editPlaylist(withRowMoved(currentPlaylist, index, MOVE_UP))),
+    rowButton("↓", "Move down", () => editPlaylist(withRowMoved(currentPlaylist, index, MOVE_DOWN))),
+    rowButton("✕", "Remove", () => editPlaylist(withoutRow(currentPlaylist, index))),
+    rowButton("Play from here", "Play the playlist from this row", () => playPlaylist(index)),
+  ];
+  const tr = document.createElement("tr");
+  tr.append(cell(String(index + 1)), cell(rowTitle(row)), cell(startTime), cell(expectedStart ? displayTime(expectedStart) : ""), cell(...actions));
+  return tr;
+}
+
+async function renderPlaylist() {
+  playlistFields.name.value = currentPlaylist.name;
+  const plan = await invoke("playlist_plan", { playlist: currentPlaylist, fromRow: 0 });
+  const expectedStarts = new Map(plan.rows.map((planned) => [planned.row, planned.expectedStart]));
+  playlistFields.rows.replaceChildren(...currentPlaylist.rows.map((row, index) => playlistRowElement(row, index, expectedStarts.get(index))));
+  playlistFields.warnings.replaceChildren(...plan.warnings.map((warning) => {
+    const item = document.createElement("li");
+    item.textContent = warningText(warning);
+    return item;
+  }));
+}
+
+async function editPlaylist(playlist) {
+  currentPlaylist = playlist;
+  await renderPlaylist();
+}
+
+async function refreshSavedPlaylists() {
+  const names = await invoke("playlist_list");
+  playlistFields.saved.replaceChildren(...names.map((name) => choiceOption(name, name)));
+}
+
+async function addToPlaylist(libraryPackage, composition) {
+  await editPlaylist(withComposition(currentPlaylist, libraryPackage, composition));
+  setStatus(`Added ${composition.title} to ${currentPlaylist.name}`);
+}
+
+async function playPlaylist(fromRow) {
+  await showPlayerWindow();
+  const state = await invoke("playlist_play", { playlist: currentPlaylist, fromRow });
+  enablePreviewTransport();
+  playlistFields.runnerStatus.textContent = runnerStatusText(state);
+}
+
+async function showRunnerState() {
+  playlistFields.runnerStatus.textContent = runnerStatusText(await invoke("playlist_state"));
+}
+
+playlistFields.name.addEventListener("change", () => {
+  currentPlaylist = { ...currentPlaylist, name: playlistFields.name.value.trim() };
+});
+document.getElementById("playlist-save").addEventListener("click", reportingErrors(async () => {
+  currentPlaylist = { ...currentPlaylist, name: playlistFields.name.value.trim() };
+  await invoke("playlist_save", { playlist: currentPlaylist });
+  await refreshSavedPlaylists();
+  setStatus(`${PLAYLIST_SAVED_STATUS}: ${currentPlaylist.name}`);
+}));
+document.getElementById("playlist-open").addEventListener("click", reportingErrors(async () => {
+  if (!playlistFields.saved.value) return;
+  await editPlaylist(await invoke("playlist_open", { name: playlistFields.saved.value }));
+}));
+document.getElementById("playlist-new").addEventListener("click", reportingErrors(() => editPlaylist(newPlaylist(DEFAULT_PLAYLIST_NAME))));
+document.getElementById("playlist-play").addEventListener("click", reportingErrors(() => playPlaylist(0)));
+document.getElementById("playlist-stop").addEventListener("click", reportingErrors(stopPlayback));
+document.getElementById("playlist-intermission-still-browse").addEventListener("click", reportingErrors(() =>
+  browseInto(playlistFields.intermissionStill, STILL_IMAGE_FILTERS)));
+document.getElementById("playlist-intermission-still-clear").addEventListener("click", () => {
+  playlistFields.intermissionStill.value = "";
+});
+document.getElementById("playlist-intermission-form").addEventListener("submit", (event) => {
+  event.preventDefault();
+  const seconds = Math.round(Number(playlistFields.intermissionMinutes.value) * SECONDS_PER_MINUTE);
+  reportingErrors(() => editPlaylist(withIntermission(currentPlaylist, seconds, playlistFields.intermissionStill.value)))();
+});
+setInterval(() => showRunnerState().catch((error) => setStatus(String(error))), PLAYLIST_POLL_INTERVAL_MS);
 
 initLibraryPanel({
   tableBody: document.getElementById("library-tbody"),
@@ -166,6 +301,7 @@ initLibraryPanel({
   load: () => invoke("library_list"),
   actions: {
     play: reportingErrors(playComposition),
+    addToPlaylist: reportingErrors(addToPlaylist),
     verify: reportingErrors((libraryPackage) => invoke("library_verify", { directory: libraryPackage.directory })),
     remove: reportingErrors((libraryPackage) => invoke("library_remove", { directory: libraryPackage.directory })),
   },

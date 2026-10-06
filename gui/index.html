@@ -14,6 +14,9 @@
         <button class="sidebar-btn active" data-view="library" title="Library">
           <svg viewBox="0 0 24 24"><path d="M3 13h8V3H3v10zm0 8h8v-6H3v6zm10 0h8V11h-8v10zm0-18v6h8V3h-8z"/></svg>
         </button>
+        <button class="sidebar-btn" data-view="playlist" title="Playlist">
+          <svg viewBox="0 0 24 24"><path d="M3 10h11v2H3zm0-4h11v2H3zm0 8h7v2H3zm13-1v8l6-4z"/></svg>
+        </button>
         <button class="sidebar-btn" data-view="keys" title="Keys">
           <svg viewBox="0 0 24 24"><path d="M18 8h-1V6c0-2.76-2.24-5-5-5S7 3.24 7 6v2H6c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V10c0-1.1-.9-2-2-2zm-6 9c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2zm3.1-9H8.9V6c0-1.71 1.39-3.1 3.1-3.1 1.71 0 3.1 1.39 3.1 3.1v2z"/></svg>
         </button>
@@ -58,6 +61,39 @@
               </thead>
               <tbody id="library-tbody"></tbody>
             </table>
+          </section>
+        </div>
+
+        <!-- PLAYLIST VIEW -->
+        <div class="view" id="view-playlist">
+          <section class="panel">
+            <div class="panel-header">
+              <h2>Playlist</h2>
+              <div class="panel-actions">
+                <input type="text" id="playlist-name" class="playlist-name" spellcheck="false" title="The name it is saved under">
+                <button id="playlist-save" class="btn-sm" title="Save under the name on the left">Save</button>
+                <select id="playlist-saved" title="Saved playlists"></select>
+                <button id="playlist-open" class="btn-sm">Open</button>
+                <button id="playlist-new" class="btn-sm">New</button>
+                <button id="playlist-play" class="btn-sm btn-primary">Play</button>
+                <button id="playlist-stop" class="btn-sm">Stop</button>
+              </div>
+            </div>
+            <p id="playlist-runner-status" class="playlist-runner-status">Not playing</p>
+            <ul id="playlist-warnings" class="playlist-warnings"></ul>
+            <table class="jobs-table">
+              <thead>
+                <tr><th>#</th><th>Row</th><th>Start Time</th><th>Expected</th><th></th></tr>
+              </thead>
+              <tbody id="playlist-tbody"></tbody>
+            </table>
+            <form id="playlist-intermission-form" class="playlist-intermission">
+              <label>Intermission <input type="number" id="playlist-intermission-minutes" min="0" step="any" value="10"> min</label>
+              <input type="text" id="playlist-intermission-still" placeholder="Black, or a still image" readonly>
+              <button type="button" id="playlist-intermission-still-browse" class="btn-sm">…</button>
+              <button type="button" id="playlist-intermission-still-clear" class="btn-sm">Black</button>
+              <button type="submit" class="btn-sm">Add Intermission</button>
+            </form>
           </section>
         </div>
 

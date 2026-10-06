@@ -39,3 +39,28 @@ body.player-cursor-hidden,
 body.player-cursor-hidden * {
   cursor: none;
 }
+
+.player-hold {
+  position: fixed;
+  inset: 0;
+  background: #000;
+}
+
+.player-hold img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.player-row {
+  color: var(--text);
+  font-size: 12px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 30%;
+}
+
+.player-row-next {
+  color: var(--text-muted);
+}

@@ -39,6 +39,7 @@ const PLAYER_CLOSE_REQUESTED_EVENT: &str = "player-close-requested";
 mod keys;
 mod library;
 mod play;
+mod playlists;
 mod settings;
 mod settings_lock;
 #[cfg(test)]
@@ -113,6 +114,13 @@ pub fn run() {
             library::library_verify,
             library::library_remove,
             play::library_play,
+            playlists::playlist_list,
+            playlists::playlist_open,
+            playlists::playlist_save,
+            playlists::playlist_plan,
+            playlists::playlist_play,
+            playlists::playlist_stop,
+            playlists::playlist_state,
             keys::keys_list,
             keys::keys_ingest,
             keys::keys_remove,
@@ -157,6 +165,9 @@ pub fn run() {
             ));
             #[cfg(not(target_os = "linux"))]
             app.manage(guikit::preview::create_player(app, PLAYER_WINDOW_LABEL));
+            app.manage(guikit::preview::screening_runner::ScreeningRunner::new(
+                app.handle().clone(),
+            ));
             app.manage(verify_jobs::start_worker(app.handle().clone()));
             Ok(())
         })

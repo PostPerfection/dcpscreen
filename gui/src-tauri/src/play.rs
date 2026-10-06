@@ -1,6 +1,8 @@
 use crate::keys::{kdm_store_directory, load_store};
 use crate::library::LibraryState;
 use crate::settings::{settings_path, Settings};
+use guikit::preview::screening_runner::RowSource;
+use postkit::content_keys::ContentKeys;
 use postkit::kdm_store::{KdmFit, KdmStore};
 use postkit::package_library::Library;
 use serde::Serialize;
@@ -8,6 +10,7 @@ use std::path::{Path, PathBuf};
 
 const NO_RECIPIENT_KEY_MESSAGE: &str =
     "an encrypted composition needs the recipient key, set it in Settings";
+const NO_KDM_FITS_MESSAGE: &str = "no KDM in the store fits it now";
 
 #[derive(Debug, PartialEq, Serialize)]
 pub struct ContentKeyPaths {
@@ -94,6 +97,24 @@ pub fn play_source(
     Ok(PlaySource::NoKdmFits { kdms })
 }
 
+// with the settings and the KDM store as they are now
+fn play_source_now(
+    library: &LibraryState,
+    directory: &Path,
+    cpl_id: uuid::Uuid,
+) -> Result<PlaySource, String> {
+    let settings = Settings::load(&settings_path())?;
+    let store = load_store(&kdm_store_directory());
+    play_source(
+        &library.lock(),
+        &store,
+        &settings,
+        directory,
+        cpl_id,
+        chrono::Utc::now(),
+    )
+}
+
 #[tauri::command(async)]
 pub fn library_play(
     directory: PathBuf,
@@ -101,16 +122,32 @@ pub fn library_play(
     library: tauri::State<'_, LibraryState>,
 ) -> Result<PlaySource, String> {
     let cpl_id = uuid::Uuid::parse_str(&cpl_id).map_err(|error| format!("{cpl_id}: {error}"))?;
-    let settings = Settings::load(&settings_path())?;
-    let store = load_store(&kdm_store_directory());
-    play_source(
-        &library.lock(),
-        &store,
-        &settings,
-        &directory,
-        cpl_id,
-        chrono::Utc::now(),
-    )
+    play_source_now(&library, &directory, cpl_id)
+}
+
+// a playlist row picks its KDM when it loads, so a KDM ingested during the show counts
+pub fn row_source(
+    library: &LibraryState,
+    directory: &Path,
+    cpl_id: uuid::Uuid,
+) -> Result<RowSource, String> {
+    match play_source_now(library, directory, cpl_id)? {
+        PlaySource::Ready {
+            cpl_path,
+            content_keys,
+        } => {
+            let keys = match content_keys {
+                Some(paths) => ContentKeys::from_options(
+                    Some(&paths.kdm),
+                    Some(&paths.recipient_key),
+                    paths.keys.as_deref(),
+                )?,
+                None => None,
+            };
+            Ok(RowSource { cpl_path, keys })
+        }
+        PlaySource::NoKdmFits { .. } => Err(NO_KDM_FITS_MESSAGE.to_string()),
+    }
 }
 
 #[cfg(test)]

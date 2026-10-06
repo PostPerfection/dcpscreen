@@ -1,4 +1,4 @@
-import { invoke } from "@tauri-apps/api/core";
+import { convertFileSrc, invoke } from "@tauri-apps/api/core";
 import { availableMonitors, getCurrentWindow } from "@tauri-apps/api/window";
 import {
   initFullPageSurface,
@@ -7,6 +7,7 @@ import {
   watchPreviewMetadata,
 } from "../../extern/guikit/src/preview.js";
 import { fullscreenMonitor } from "./player-monitor.js";
+import { playlistHudText } from "./screening-playlist.js";
 
 const MAIN_WINDOW_LABEL = "main";
 const HUD_IDLE_TIMEOUT_MS = 3000;
@@ -15,10 +16,17 @@ const CURSOR_HIDDEN_CLASS = "player-cursor-hidden";
 const LEAVE_FULLSCREEN_KEY = "Escape";
 const PLAY_PAUSE_KEY = " ";
 const FULLSCREEN_TOGGLE_KEYS = ["f", "F"];
+const PLAYLIST_POLL_INTERVAL_MS = 500;
+const HOLDING_ACTIVITY = "holding";
 
 const playerWindow = getCurrentWindow();
 const hud = document.getElementById("player-hud");
 const hint = document.getElementById("player-hint");
+const hold = document.getElementById("player-hold");
+const holdStill = document.getElementById("player-hold-still");
+const playlistRow = document.getElementById("player-row");
+const playlistRowCurrent = document.getElementById("player-row-current");
+const playlistRowNext = document.getElementById("player-row-next");
 let paused = false;
 // in page coordinates, null once a resize has moved the page under the pointer
 let lastPointer = null;
@@ -117,5 +125,24 @@ document
   .getElementById("player-fullscreen-btn")
   .addEventListener("click", () => toggleFullscreen().catch(reportFailure));
 
+function showHold(stillImage) {
+  hold.hidden = false;
+  const source = stillImage ? convertFileSrc(stillImage) : "";
+  if (holdStill.getAttribute("src") !== source) holdStill.setAttribute("src", source);
+  holdStill.hidden = !stillImage;
+}
+
+async function showPlaylistState() {
+  const state = await invoke("playlist_state");
+  if (state?.activity === HOLDING_ACTIVITY) showHold(state.stillImage);
+  else hold.hidden = true;
+  const text = playlistHudText(state);
+  playlistRow.hidden = !text;
+  if (!text) return;
+  playlistRowCurrent.textContent = text.current;
+  playlistRowNext.textContent = text.next;
+}
+
+setInterval(() => showPlaylistState().catch(reportFailure), PLAYLIST_POLL_INTERVAL_MS);
 initFullPageSurface();
 initLiveTransport();

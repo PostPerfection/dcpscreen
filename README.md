@@ -42,7 +42,11 @@ Play opens the player as a normal window. Full screen goes to the display named 
 
 grok looks for `libgrokj2k_plugin` in the directory `GRK_PLUGIN_PATH` names, then in the working directory, then in the executable's own directory, and never on `LD_LIBRARY_PATH`. Without the plugin the player decodes on the CPU. `GRK_NO_PLUGIN=1` keeps grok on the CPU even when the plugin is found.
 
-Settings are kept in `~/.config/dcpscreen/settings.json`. The library (`library.json`), the KDM store (`kdms/`) and the verify jobs (`jobs.jsonl`) are kept in `~/.local/share/dcpscreen`. `XDG_CONFIG_HOME` and `XDG_DATA_HOME` move them, and `DCPSCREEN_JOBS_FILE` names a jobs file of its own. The library is refreshed from the folders in Settings at startup and prints what it found as `[library] refresh: ...` on stdout.
+Settings are kept in `~/.config/dcpscreen/settings.json`. The library (`library.json`), the KDM store (`kdms/`), the playlists (`playlists/<name>.json`) and the verify jobs (`jobs.jsonl`) are kept in `~/.local/share/dcpscreen`. `XDG_CONFIG_HOME` and `XDG_DATA_HOME` move them, and `DCPSCREEN_JOBS_FILE` names a jobs file of its own. The library is refreshed from the folders in Settings at startup and prints what it found as `[library] refresh: ...` on stdout.
+
+## Playlists
+
+A playlist runs compositions and intermissions in order. A composition that follows another composition plays straight on with no black frame between them. An intermission stops the picture and holds black or its still image for its length. A row with a start time waits on black until that local time when the row before ends earlier, and starts late, with a warning on the Playlist view, when the row before ends after it. The KDM for an encrypted composition is picked from the store when the row loads. Playing a composition from the library, Stop or closing the player window ends the playlist. The log lines start with `[playlist]`.
 
 ## Settings lock
 
