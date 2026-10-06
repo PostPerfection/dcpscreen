@@ -2,9 +2,11 @@ use crate::settings::{settings_path, Settings};
 use crate::settings_lock::SettingsLock;
 use crate::verify_jobs::{JobQueue, VerifyJob, VerifyWorker};
 use postkit::package_library::{
-    refresh, CompositionEntry, Library, LibraryEntry, RefreshReport, Standard, Verdict,
+    refresh, CompositionEntry, ImfPicture, Library, LibraryEntry, RefreshReport, Standard, Verdict,
     VerdictState,
 };
+use postkit::packaging::ns::{APP2E, APP2E_2020};
+use postkit::preview_colour::{DisplayPrimaries, DisplayTransfer};
 use serde::Serialize;
 use std::path::{Path, PathBuf};
 use std::sync::{Mutex, MutexGuard};
@@ -79,6 +81,9 @@ struct CompositionRow {
     duration_frames: u64,
     edit_rate: [u32; 2],
     encrypted: bool,
+    // an IMF composition's application and colour, as the standard column shows them
+    #[serde(skip_serializing_if = "Option::is_none")]
+    picture: Option<String>,
 }
 
 #[derive(Debug, Serialize)]
@@ -93,7 +98,29 @@ fn standard_name(standard: Standard) -> &'static str {
     match standard {
         Standard::Interop => "Interop",
         Standard::Smpte => "SMPTE",
+        Standard::Imf => "IMF",
     }
+}
+
+fn imf_picture_text(picture: &ImfPicture) -> String {
+    let application = match picture.application_identification.as_deref() {
+        Some(APP2E | APP2E_2020) => "App 2E",
+        Some(other) => other,
+        None => "no application",
+    };
+    let primaries = match picture.colour_primaries {
+        Some(DisplayPrimaries::Bt709) => "Rec.709",
+        Some(DisplayPrimaries::P3D65) => "P3 D65",
+        Some(DisplayPrimaries::Bt2020) => "Rec.2020",
+        None => "unknown primaries",
+    };
+    let transfer = match picture.transfer_characteristic {
+        Some(DisplayTransfer::Bt709) => "BT.709",
+        Some(DisplayTransfer::Pq) => "PQ",
+        Some(DisplayTransfer::Hlg) => "HLG",
+        None => "unknown transfer",
+    };
+    format!("{application}, {primaries}, {transfer}")
 }
 
 fn composition_row(composition: &CompositionEntry) -> CompositionRow {
@@ -104,6 +131,7 @@ fn composition_row(composition: &CompositionEntry) -> CompositionRow {
         duration_frames: composition.duration_frames,
         edit_rate: [numerator, denominator],
         encrypted: composition.encrypted,
+        picture: composition.imf_picture.as_ref().map(imf_picture_text),
     }
 }
 
@@ -190,7 +218,9 @@ pub fn library_remove(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::test_fixtures::{write_package, FEATURE, FEATURE_ID, TRAILER, TRAILER_ID};
+    use crate::test_fixtures::{
+        write_imp_package, write_package, FEATURE, FEATURE_ID, IMP_ID, TRAILER, TRAILER_ID,
+    };
     use serde_json::json;
 
     const VERIFIED_AT: &str = "2026-10-06T12:00:00Z";
@@ -254,6 +284,31 @@ mod tests {
                         },
                     },
                 ],
+            })
+        );
+    }
+
+    #[test]
+    fn an_imp_lists_as_imf_with_its_application_and_colour() {
+        let root = tempfile::tempdir().unwrap();
+        write_imp_package(&root.path().join("imp"));
+        let state = LibraryState::load(root.path().join(LIBRARY_FILE)).unwrap();
+        let summary = state.refresh(&[root.path().to_path_buf()]).unwrap();
+
+        let listing = serde_json::to_value(library_listing(&state.lock())).unwrap();
+
+        assert_eq!(summary, "refresh: 1 added, 0 kept, 0 removed, 0 unreadable");
+        let package = &listing["packages"][0];
+        assert_eq!(package["standard"], "IMF");
+        assert_eq!(
+            package["compositions"][0],
+            json!({
+                "id": IMP_ID,
+                "title": "Review Master",
+                "durationFrames": 240,
+                "editRate": [24000, 1001],
+                "encrypted": false,
+                "picture": "App 2E, P3 D65, PQ",
             })
         );
     }

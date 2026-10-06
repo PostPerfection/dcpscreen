@@ -1,6 +1,9 @@
 use chrono::{DateTime, Duration, Utc};
 use postkit::certificate::{build_kdm, generate_chain, KdmConfig, KdmContentKey, KdmFormulation};
-use postkit::packaging::{ns, AssetMap, AssetMapAsset, DcpCpl, DcpCplReel, PackingList, PklAsset};
+use postkit::packaging::{
+    ns, App2eEdition, AssetMap, AssetMapAsset, DcpCpl, DcpCplReel, ImfCpl, ImfEssenceDescriptor,
+    ImfResource, ImfTrackKind, PackingList, PklAsset,
+};
 use std::path::{Path, PathBuf};
 use std::sync::OnceLock;
 
@@ -18,6 +21,16 @@ const TEXT_XML_TYPE: &str = "text/xml";
 pub const FEATURE_ID: &str = "11111111-0000-0000-0000-000000000000";
 pub const TRAILER_ID: &str = "22222222-0000-0000-0000-000000000000";
 pub const ORIGINAL_VERSION_ID: &str = "33333333-0000-0000-0000-000000000000";
+pub const IMP_ID: &str = "44444444-0000-4000-8000-000000000000";
+const IMP_PICTURE_ID: &str = "44444444-0000-4000-8000-000000000001";
+const IMP_PICTURE_DESCRIPTOR_ID: &str = "44444444-0000-4000-8000-000000000002";
+const IMP_FRAMES: u64 = 240;
+// P3 D65 primaries and the PQ transfer, as an App 2E HDR master's CPL repeats its descriptor
+const IMP_PICTURE_DESCRIPTOR: &str = "<r0:RGBADescriptor xmlns:r0=\"http://www.smpte-ra.org/reg/395/2014/13/1/aaf\" \
+     xmlns:r1=\"http://www.smpte-ra.org/reg/335/2012\">\
+     <r1:TransferCharacteristic>urn:smpte:ul:060e2b34.0401010d.04010101.010a0000</r1:TransferCharacteristic>\
+     <r1:ColorPrimaries>urn:smpte:ul:060e2b34.0401010d.04010101.03060000</r1:ColorPrimaries>\
+     </r0:RGBADescriptor>";
 
 pub struct TestComposition {
     pub id: &'static str,
@@ -139,6 +152,60 @@ pub fn write_package_holding(
         uuid: ASSETMAP_ID.into(),
         namespace: ns::AM_SMPTE.into(),
         assets,
+        ..Default::default()
+    };
+    std::fs::write(directory.join("ASSETMAP.xml"), assetmap.to_xml()).unwrap();
+}
+
+// an App 2E IMP's CPL, PKL and asset map, its picture track file not in the package
+pub fn write_imp_package(directory: &Path) {
+    std::fs::create_dir_all(directory).unwrap();
+    let cpl = ImfCpl {
+        uuid: IMP_ID.into(),
+        title: "Review Master".into(),
+        fps_num: 24000,
+        fps_den: 1001,
+        resources: vec![ImfResource {
+            track_file_uuid: IMP_PICTURE_ID.into(),
+            duration: IMP_FRAMES,
+            kind: ImfTrackKind::Image,
+            source_encoding: Some(IMP_PICTURE_DESCRIPTOR_ID.into()),
+        }],
+        essence_descriptors: vec![ImfEssenceDescriptor {
+            id: IMP_PICTURE_DESCRIPTOR_ID.into(),
+            body: IMP_PICTURE_DESCRIPTOR.into(),
+        }],
+        app2e_edition: App2eEdition::Edition2020,
+        ..Default::default()
+    };
+    std::fs::write(directory.join(cpl_file_name(IMP_ID)), cpl.to_xml()).unwrap();
+    let packing_list_file = format!("PKL_{PACKING_LIST_ID}.xml");
+    let packing_list = PackingList {
+        uuid: PACKING_LIST_ID.into(),
+        namespace: ns::PKL_IMF.into(),
+        assets: vec![PklAsset {
+            id: IMP_ID.into(),
+            asset_type: TEXT_XML_TYPE.into(),
+            ..Default::default()
+        }],
+        ..Default::default()
+    };
+    std::fs::write(directory.join(&packing_list_file), packing_list.to_xml()).unwrap();
+    let assetmap = AssetMap {
+        uuid: ASSETMAP_ID.into(),
+        namespace: ns::AM_SMPTE.into(),
+        assets: vec![
+            AssetMapAsset {
+                id: PACKING_LIST_ID.into(),
+                path: packing_list_file,
+                packing_list: true,
+            },
+            AssetMapAsset {
+                id: IMP_ID.into(),
+                path: cpl_file_name(IMP_ID),
+                packing_list: false,
+            },
+        ],
         ..Default::default()
     };
     std::fs::write(directory.join("ASSETMAP.xml"), assetmap.to_xml()).unwrap();
