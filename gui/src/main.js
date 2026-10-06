@@ -108,6 +108,7 @@ const playerFields = {
   subtitleColourOverridden: document.getElementById("set-player-subtitle-colour-overridden"),
   subtitleColour: document.getElementById("set-player-subtitle-colour"),
   displayProfile: document.getElementById("set-player-display-profile"),
+  stereo: document.getElementById("set-player-stereo"),
   colordProfiles: document.getElementById("set-player-display-profile-colord"),
   displayProfileError: document.getElementById("set-player-display-profile-error"),
 };
@@ -530,6 +531,7 @@ function playerControlsFromForm() {
     subtitleColourOverridden: playerFields.subtitleColourOverridden.checked,
     subtitleColour: playerFields.subtitleColour.value,
     displayProfile: playerFields.displayProfile.value,
+    stereo: playerFields.stereo.value,
   });
 }
 
@@ -560,8 +562,8 @@ async function applyPlayerControls(settings) {
     if (command === DISPLAY_PROFILE_COMMAND) await applyDisplayProfile(args);
     else await invoke(command, args);
   }
-  const { playerPicture, playerSound, playerSubtitles, playerDisplayProfile } = settings;
-  appliedPlayerControls = { playerPicture, playerSound, playerSubtitles, playerDisplayProfile };
+  const { playerPicture, playerSound, playerSubtitles, playerDisplayProfile, playerStereo } = settings;
+  appliedPlayerControls = { playerPicture, playerSound, playerSubtitles, playerDisplayProfile, playerStereo };
 }
 
 function showPlayerWarnings(metadata) {

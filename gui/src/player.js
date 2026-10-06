@@ -8,6 +8,7 @@ import {
 } from "../../extern/guikit/src/preview.js";
 import { fullscreenMonitor } from "./player-monitor.js";
 import { holdCountdownText, playlistHudText } from "./screening-playlist.js";
+import { nextStereoMode, stereoHudText } from "./stereo-output.js";
 
 const MAIN_WINDOW_LABEL = "main";
 const HUD_IDLE_TIMEOUT_MS = 3000;
@@ -30,6 +31,7 @@ const playlistRow = document.getElementById("player-row");
 const playlistRowCurrent = document.getElementById("player-row-current");
 const playlistRowNext = document.getElementById("player-row-next");
 const holdCountdown = document.getElementById("player-hold-countdown");
+const stereoButton = document.getElementById("player-stereo-btn");
 let paused = false;
 // in page coordinates, null once a resize has moved the page under the pointer
 let lastPointer = null;
@@ -117,7 +119,21 @@ window.addEventListener("dblclick", (event) => {
   if (hud.contains(event.target)) return;
   toggleFullscreen().catch(reportFailure);
 });
+async function showStereoOutput(stereoscopic) {
+  const mode = stereoscopic ? await invoke("preview_stereo_output") : null;
+  const text = stereoHudText(stereoscopic, mode);
+  stereoButton.hidden = !text;
+  stereoButton.textContent = text ?? "";
+}
+
+stereoButton.addEventListener("click", () =>
+  invoke("preview_stereo_output")
+    .then((mode) => invoke("preview_set_stereo_output", { output: nextStereoMode(mode) }))
+    .then(() => showStereoOutput(true))
+    .catch(reportFailure));
+
 watchPreviewMetadata((meta) => {
+  showStereoOutput(Boolean(meta.stereoscopic)).catch(reportFailure);
   const nowPaused = Boolean(meta.paused);
   if (nowPaused === paused) return;
   paused = nowPaused;

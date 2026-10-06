@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Settings has a 3D Output for stereoscopic DCPs: left eye, right eye, side by side or top and bottom, applied at startup and on Save. The two both-eye outputs decode twice the pictures. While a 3D source plays, the player's controls show the output in use, and clicking it steps to the next one until the setting changes or the app restarts.
 - Settings has "Require HDCP for encrypted content", off by default and covered by the settings lock. On Linux, with it on, an encrypted composition plays from the library or a playlist only when the display output the player window is on reads Content Protection Enabled, and playback stops within 2 seconds of the output leaving Enabled. Otherwise the play is refused naming the output and its state, or saying that no output matched. A playlist row refused this way is skipped. Unencrypted content is never checked. Other systems show the setting as not supported and never block playback.
 - Playlist composition rows take an in and an out point, typed as HH:MM:SS:FF timecode at the composition's frame rate or set with Set from the frame on screen while the playlist plays that row. The row plays from the in frame and stops before the out frame, the next composition takes over there with no gap, and the view shows the length of the range. A range past the end of the composition is a warning on the Playlist view. Playlists are saved in format 2, and a format 1 playlist opens as before.
 - Settings fills every Player field when the sound devices cannot be listed, and says why under Sound Device.

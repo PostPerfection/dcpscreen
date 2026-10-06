@@ -104,6 +104,8 @@ pub fn run() {
             guikit::preview::player_controls::preview_set_subtitle_presentation,
             guikit::preview::player_controls::preview_sound_devices,
             guikit::preview::player_controls::preview_set_display_profile,
+            guikit::preview::player_controls::preview_set_stereo_output,
+            guikit::preview::player_controls::preview_stereo_output,
             display_profiles::display_profiles,
             hdcp::hdcp_supported,
             guikit::gpu::set_gpu,

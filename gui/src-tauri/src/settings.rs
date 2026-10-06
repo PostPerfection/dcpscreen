@@ -1,5 +1,7 @@
 use crate::settings_lock::{LockState, SettingsLock};
-use guikit::preview::player_controls::{PictureControls, SoundControls, SubtitleControls};
+use guikit::preview::player_controls::{
+    PictureControls, SoundControls, StereoMode, SubtitleControls,
+};
 use postkit::colour::{RenderingIntent, XyzToIcc};
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
@@ -24,6 +26,7 @@ pub struct Settings {
     pub player_picture: PictureControls,
     pub player_sound: SoundControls,
     pub player_subtitles: SubtitleControls,
+    pub player_stereo: StereoMode,
     // a monitor ICC profile for DCP pictures, None is the built-in sRGB
     pub player_display_profile: Option<PathBuf>,
     // encrypted content plays only on an output whose HDCP reads Enabled
@@ -145,6 +148,7 @@ mod tests {
                 offset_percent: 4.0,
                 colour: Some("#ffcc00".to_string()),
             },
+            player_stereo: StereoMode::SideBySide,
             player_display_profile: Some(PathBuf::from("/usr/share/color/icc/booth.icc")),
             require_hdcp: true,
         };
@@ -186,6 +190,7 @@ mod tests {
             serde_json::json!("#ffcc00")
         );
         assert_eq!(json["requireHdcp"], serde_json::json!(true));
+        assert_eq!(json["playerStereo"], serde_json::json!("sideBySide"));
         assert_eq!(
             json["playerDisplayProfile"],
             serde_json::json!("/usr/share/color/icc/booth.icc")
@@ -224,6 +229,7 @@ mod tests {
         assert_eq!(settings.player_subtitles, SubtitleControls::default());
         assert_eq!(settings.player_display_profile, None);
         assert!(!settings.require_hdcp);
+        assert_eq!(settings.player_stereo, StereoMode::LeftEye);
     }
 
     #[test]

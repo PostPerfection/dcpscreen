@@ -21,6 +21,7 @@ export function playerControlsFromFields({
   subtitleColourOverridden,
   subtitleColour,
   displayProfile,
+  stereo,
 }) {
   return {
     playerPicture: {
@@ -43,6 +44,7 @@ export function playerControlsFromFields({
       colour: subtitleColourOverridden ? subtitleColour : null,
     },
     playerDisplayProfile: displayProfile || null,
+    playerStereo: stereo,
   };
 }
 
@@ -68,6 +70,9 @@ export function playerControlCommands(applied, settings) {
   }
   if (changed((controls) => controls.playerSubtitles)) {
     commands.push(["preview_set_subtitle_presentation", { subtitles: settings.playerSubtitles }]);
+  }
+  if (changed((controls) => controls.playerStereo)) {
+    commands.push(["preview_set_stereo_output", { output: settings.playerStereo }]);
   }
   if (changed((controls) => controls.playerDisplayProfile)) {
     commands.push([DISPLAY_PROFILE_COMMAND, { profile: settings.playerDisplayProfile }]);
@@ -95,8 +100,9 @@ export function playerWarningText(warnings) {
 
 // every field fills on its own, and a device list that fails leaves the saved device and says why
 export async function fillPlayerControlFields(fields, settings, { listSoundDevices, makeOption }) {
-  const { playerPicture, playerSound, playerSubtitles, playerDisplayProfile } = settings;
+  const { playerPicture, playerSound, playerSubtitles, playerDisplayProfile, playerStereo } = settings;
   fields.displayProfile.value = playerDisplayProfile ?? "";
+  fields.stereo.value = playerStereo;
   fields.brightness.value = playerPicture.brightness;
   fields.maskTop.value = playerPicture.masksPercent.top;
   fields.maskBottom.value = playerPicture.masksPercent.bottom;
