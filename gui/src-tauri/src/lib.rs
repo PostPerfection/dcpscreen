@@ -1,6 +1,6 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
-use tauri::Manager;
+use tauri::{Emitter, Manager};
 
 const APP_DIRECTORY_NAME: &str = "dcpscreen";
 const MAIN_WINDOW_LABEL: &str = "main";
@@ -17,7 +17,24 @@ const MAIN_WINDOW_MINIMUM_WIDTH: f64 = 700.0;
 #[cfg(target_os = "linux")]
 const MAIN_WINDOW_MINIMUM_HEIGHT: f64 = 500.0;
 #[cfg(target_os = "linux")]
-const MAIN_WINDOW_BACKGROUND: tauri::window::Color = tauri::window::Color(0, 0, 0, 255);
+const WINDOW_BACKGROUND: tauri::window::Color = tauri::window::Color(0, 0, 0, 255);
+const PLAYER_WINDOW_LABEL: &str = "player";
+#[cfg(target_os = "linux")]
+const PLAYER_WEBVIEW_LABEL: &str = "player-webview";
+#[cfg(target_os = "linux")]
+const PLAYER_PAGE: &str = "player.html";
+#[cfg(target_os = "linux")]
+const PLAYER_WINDOW_TITLE: &str = "DCP Screen Player";
+#[cfg(target_os = "linux")]
+const PLAYER_WINDOW_WIDTH: f64 = 1280.0;
+#[cfg(target_os = "linux")]
+const PLAYER_WINDOW_HEIGHT: f64 = 720.0;
+#[cfg(target_os = "linux")]
+const PLAYER_WINDOW_MINIMUM_WIDTH: f64 = 320.0;
+#[cfg(target_os = "linux")]
+const PLAYER_WINDOW_MINIMUM_HEIGHT: f64 = 180.0;
+// the main page stops playback when it hears this
+const PLAYER_CLOSE_REQUESTED_EVENT: &str = "player-close-requested";
 
 mod keys;
 mod library;
@@ -102,12 +119,40 @@ pub fn run() {
                     height: MAIN_WINDOW_HEIGHT,
                     minimum_width: MAIN_WINDOW_MINIMUM_WIDTH,
                     minimum_height: MAIN_WINDOW_MINIMUM_HEIGHT,
-                    background: MAIN_WINDOW_BACKGROUND,
+                    background: WINDOW_BACKGROUND,
                 },
             )?;
-            app.manage(guikit::preview::create_player(app, MAIN_WINDOW_LABEL));
+            #[cfg(target_os = "linux")]
+            guikit::startup::create_hidden_window(
+                app,
+                &guikit::startup::MainWindow {
+                    label: PLAYER_WINDOW_LABEL,
+                    webview_label: PLAYER_WEBVIEW_LABEL,
+                    title: PLAYER_WINDOW_TITLE,
+                    width: PLAYER_WINDOW_WIDTH,
+                    height: PLAYER_WINDOW_HEIGHT,
+                    minimum_width: PLAYER_WINDOW_MINIMUM_WIDTH,
+                    minimum_height: PLAYER_WINDOW_MINIMUM_HEIGHT,
+                    background: WINDOW_BACKGROUND,
+                },
+                PLAYER_PAGE,
+            )?;
+            app.manage(guikit::preview::create_player(app, PLAYER_WINDOW_LABEL));
             app.manage(verify_jobs::start_worker(app.handle().clone()));
             Ok(())
+        })
+        .on_window_event(|window, event| match (window.label(), event) {
+            // the player window holds the video surface
+            (PLAYER_WINDOW_LABEL, tauri::WindowEvent::CloseRequested { api, .. }) => {
+                api.prevent_close();
+                window.hide().expect("the player window does not hide");
+                window
+                    .emit_to(MAIN_WINDOW_LABEL, PLAYER_CLOSE_REQUESTED_EVENT, ())
+                    .expect("the main window does not hear the player close");
+            }
+            // the hidden player window would keep the app running
+            (MAIN_WINDOW_LABEL, tauri::WindowEvent::Destroyed) => window.app_handle().exit(0),
+            _ => {}
         })
         .build(tauri::generate_context!())
         .expect("error while building tauri application")

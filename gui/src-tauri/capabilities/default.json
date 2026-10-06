@@ -2,12 +2,18 @@
   "identifier": "default",
   "description": "Default capabilities for DCP Screen",
   "windows": [
-    "main"
+    "main",
+    "player"
   ],
   "permissions": [
     "core:default",
     "dialog:allow-open",
     "dialog:allow-message",
-    "core:window:allow-set-fullscreen"
+    "core:window:allow-set-fullscreen",
+    "core:window:allow-set-fullscreen-on-monitor",
+    "core:window:allow-set-position",
+    "core:window:allow-set-focus",
+    "core:window:allow-show",
+    "core:window:allow-hide"
   ]
 }

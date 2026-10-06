@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { settingsFromFields, withLibraryRoot, withoutLibraryRoot } from '../src/settings-form.js';
 
-test('empty recipient and GPU text fields are saved as unset', () => {
+test('empty recipient, GPU and player monitor fields are saved as unset', () => {
   assert.deepEqual(
     settingsFromFields({
       libraryRoots: ['/srv/dcp'],
@@ -11,6 +11,8 @@ test('empty recipient and GPU text fields are saved as unset', () => {
       gpu: true,
       gpuLicense: '',
       gpuRegistrationUrl: 'https://licence.example/register',
+      playerMonitor: '',
+      playerFullscreen: false,
     }),
     {
       libraryRoots: ['/srv/dcp'],
@@ -19,6 +21,8 @@ test('empty recipient and GPU text fields are saved as unset', () => {
       gpu: true,
       gpuLicense: null,
       gpuRegistrationUrl: 'https://licence.example/register',
+      playerMonitor: null,
+      playerFullscreen: false,
     },
   );
 });

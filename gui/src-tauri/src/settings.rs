@@ -7,7 +7,7 @@ pub fn settings_path() -> PathBuf {
     postkit::preferences::config_dir(crate::APP_DIRECTORY_NAME).join(SETTINGS_FILE)
 }
 
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", default)]
 pub struct Settings {
     pub library_roots: Vec<PathBuf>,
@@ -16,6 +16,24 @@ pub struct Settings {
     pub gpu: bool,
     pub gpu_license: Option<String>,
     pub gpu_registration_url: Option<String>,
+    // None plays on the monitor the main window is on
+    pub player_monitor: Option<String>,
+    pub player_fullscreen: bool,
+}
+
+impl Default for Settings {
+    fn default() -> Self {
+        Settings {
+            library_roots: Vec::new(),
+            recipient_certificate: None,
+            recipient_key: None,
+            gpu: false,
+            gpu_license: None,
+            gpu_registration_url: None,
+            player_monitor: None,
+            player_fullscreen: true,
+        }
+    }
 }
 
 impl Settings {
@@ -70,6 +88,8 @@ mod tests {
             gpu: true,
             gpu_license: Some("licence-token".to_string()),
             gpu_registration_url: Some("https://licence.example/register".to_string()),
+            player_monitor: Some("HDMI-1".to_string()),
+            player_fullscreen: false,
         };
 
         settings.save(&path).unwrap();
@@ -88,6 +108,8 @@ mod tests {
             json["gpuRegistrationUrl"],
             serde_json::json!("https://licence.example/register")
         );
+        assert_eq!(json["playerMonitor"], serde_json::json!("HDMI-1"));
+        assert_eq!(json["playerFullscreen"], serde_json::json!(false));
     }
 
     #[test]
@@ -102,6 +124,18 @@ mod tests {
         assert!(!settings.gpu);
         assert_eq!(settings.gpu_license, None);
         assert_eq!(settings.gpu_registration_url, None);
+    }
+
+    #[test]
+    fn a_settings_file_written_before_the_player_fields_plays_full_screen_on_the_main_monitor() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join(SETTINGS_FILE);
+        std::fs::write(&path, r#"{"libraryRoots": ["/srv/dcp"], "gpu": true}"#).unwrap();
+
+        let settings = Settings::load(&path).unwrap();
+
+        assert_eq!(settings.player_monitor, None);
+        assert!(settings.player_fullscreen);
     }
 
     #[test]

@@ -1,12 +1,15 @@
 import { invoke } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
+import { Window, availableMonitors, currentMonitor } from "@tauri-apps/api/window";
 import { open, message } from "@tauri-apps/plugin-dialog";
-import { initPreview, previewFile } from "../../extern/guikit/src/preview.js";
+import { initPreview, previewFile, stopPreview } from "../../extern/guikit/src/preview.js";
 import { initJobsPanel, refreshJobs, startJobsPolling, stopJobsPolling } from "../../extern/guikit/src/jobs.js";
 import { initLibraryPanel, refreshLibrary } from "../../extern/guikit/src/library.js";
 import { initKeysPanel, refreshKeys } from "../../extern/guikit/src/keys.js";
 import { initGpuSettings, fillGpuSettings, gpuSettingsFromForm, uncheckGpu, applyGpuSetting } from "../../extern/guikit/src/gpu-settings.js";
 import { settingsFromFields, withLibraryRoot, withoutLibraryRoot } from "./settings-form.js";
 import { playRefusalText } from "./play-refusal.js";
+import { monitorForPlayer, playerMonitorChoices } from "./player-monitor.js";
 
 const KDM_FILTERS = [{ name: "KDM", extensions: ["xml"] }];
 const CERTIFICATE_FILTERS = [{ name: "Certificate", extensions: ["pem", "crt"] }];
@@ -17,10 +20,17 @@ const SETTINGS_SAVED_STATUS = "Settings saved";
 const GPU_UNAVAILABLE_STATUS = "GPU decoding unavailable";
 const LIBRARY_POLL_INTERVAL_MS = 3000;
 const REMOVE_ROOT_TEXT = "✕";
+const PLAYER_WINDOW_LABEL = "player";
+// the Rust side sends it when the window manager closes the player window
+const PLAYER_CLOSE_REQUESTED_EVENT = "player-close-requested";
+const MAIN_WINDOW_MONITOR_TEXT = "Same as the main window";
 
 const certificateInput = document.getElementById("set-recipient-certificate");
 const privateKeyInput = document.getElementById("set-recipient-key");
 const libraryRootsList = document.getElementById("set-library-roots");
+const playerMonitorSelect = document.getElementById("set-player-monitor");
+const playerFullscreenInput = document.getElementById("set-player-fullscreen");
+const playerWindow = await Window.getByLabel(PLAYER_WINDOW_LABEL);
 let libraryRoots = [];
 let libraryPoll = null;
 
@@ -93,12 +103,31 @@ async function refreshLibraryFromDisk() {
   await refreshLibrary();
 }
 
+async function showPlayerWindow() {
+  const settings = await invoke("load_settings");
+  const monitor = monitorForPlayer(await availableMonitors(), settings.playerMonitor, await currentMonitor());
+  await playerWindow.show();
+  if (settings.playerFullscreen) {
+    await playerWindow.setFullscreenOnMonitor(monitor.position);
+  } else {
+    await playerWindow.setFullscreen(false);
+    await playerWindow.setPosition(monitor.position);
+  }
+  await playerWindow.setFocus();
+}
+
+async function stopPlayback() {
+  stopPreview();
+  await playerWindow.hide();
+}
+
 async function playComposition(libraryPackage, composition) {
   const source = await invoke("library_play", { directory: libraryPackage.directory, cplId: composition.id });
   if (source.kind !== PLAY_SOURCE_READY) {
     await message(playRefusalText(composition.title, source.kdms), { title: PLAY_REFUSAL_TITLE, kind: "warning" });
     return;
   }
+  await showPlayerWindow();
   await previewFile(source.cplPath, source.contentKeys);
 }
 
@@ -113,6 +142,8 @@ initLibraryPanel({
   },
 });
 document.getElementById("library-refresh").addEventListener("click", reportingErrors(refreshLibraryFromDisk));
+document.getElementById("player-stop-btn").addEventListener("click", reportingErrors(stopPlayback));
+listen(PLAYER_CLOSE_REQUESTED_EVENT, reportingErrors(stopPlayback));
 
 async function ingestKdm() {
   const path = await open({ filters: KDM_FILTERS });
@@ -146,6 +177,23 @@ function renderLibraryRoots() {
   }));
 }
 
+function monitorOption(value, text) {
+  const option = document.createElement("option");
+  option.value = value;
+  option.textContent = text;
+  return option;
+}
+
+async function fillPlayerSettings(settings) {
+  const choices = playerMonitorChoices(await availableMonitors(), settings.playerMonitor);
+  playerMonitorSelect.replaceChildren(
+    monitorOption("", MAIN_WINDOW_MONITOR_TEXT),
+    ...choices.map((choice) => monitorOption(choice.name, choice.label)),
+  );
+  playerMonitorSelect.value = settings.playerMonitor ?? "";
+  playerFullscreenInput.checked = settings.playerFullscreen;
+}
+
 async function showSettings() {
   const settings = await invoke("load_settings");
   libraryRoots = settings.libraryRoots;
@@ -153,6 +201,7 @@ async function showSettings() {
   privateKeyInput.value = settings.recipientKey ?? "";
   fillGpuSettings(settings);
   renderLibraryRoots();
+  await fillPlayerSettings(settings);
   return settings;
 }
 
@@ -192,6 +241,8 @@ document.getElementById("settings-form").addEventListener("submit", (event) => {
       recipientCertificate: certificateInput.value,
       recipientKey: privateKeyInput.value,
       ...gpuSettingsFromForm(),
+      playerMonitor: playerMonitorSelect.value,
+      playerFullscreen: playerFullscreenInput.checked,
     });
     const gpuFailure = await applyGpuSetting(settings);
     await invoke("save_settings", { settings: gpuFailure ? { ...settings, gpu: false } : settings });
