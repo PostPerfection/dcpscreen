@@ -1,0 +1,15 @@
+@import "../../extern/guikit/src/base.css";
+
+.status-section {
+  min-width: 0;
+}
+.status-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+.library-roots {
+  margin: 0 0 6px;
+  padding-left: 18px;
+}

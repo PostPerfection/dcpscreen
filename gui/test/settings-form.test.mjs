@@ -1,0 +1,19 @@
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import { settingsFromFields, withLibraryRoot, withoutLibraryRoot } from '../src/settings-form.js';
+
+test('empty recipient fields are saved as unset', () => {
+  assert.deepEqual(
+    settingsFromFields({ libraryRoots: ['/srv/dcp'], recipientCertificate: '', recipientKey: '/keys/leaf.key' }),
+    { libraryRoots: ['/srv/dcp'], recipientCertificate: null, recipientKey: '/keys/leaf.key' },
+  );
+});
+
+test('a folder already listed is not added twice', () => {
+  assert.deepEqual(withLibraryRoot(['/srv/dcp'], '/srv/dcp'), ['/srv/dcp']);
+  assert.deepEqual(withLibraryRoot(['/srv/dcp'], '/mnt/ingest'), ['/srv/dcp', '/mnt/ingest']);
+});
+
+test('removing a folder drops only the one at that index', () => {
+  assert.deepEqual(withoutLibraryRoot(['/a', '/b', '/c'], 1), ['/a', '/c']);
+});

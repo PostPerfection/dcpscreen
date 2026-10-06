@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>DCP Screen</title>
+  <link rel="stylesheet" href="/src/style.css" />
+</head>
+<body>
+  <div id="app">
+    <!-- Sidebar -->
+    <aside class="sidebar">
+      <div class="sidebar-top">
+        <button class="sidebar-btn active" data-view="library" title="Library">
+          <svg viewBox="0 0 24 24"><path d="M3 13h8V3H3v10zm0 8h8v-6H3v6zm10 0h8V11h-8v10zm0-18v6h8V3h-8z"/></svg>
+        </button>
+        <button class="sidebar-btn" data-view="keys" title="Keys">
+          <svg viewBox="0 0 24 24"><path d="M18 8h-1V6c0-2.76-2.24-5-5-5S7 3.24 7 6v2H6c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V10c0-1.1-.9-2-2-2zm-6 9c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2zm3.1-9H8.9V6c0-1.71 1.39-3.1 3.1-3.1 1.71 0 3.1 1.39 3.1 3.1v2z"/></svg>
+        </button>
+        <button class="sidebar-btn" data-view="jobs" title="Jobs">
+          <svg viewBox="0 0 24 24"><path d="M4 6h18V4H4v2zm0 5h18V9H4v2zm0 5h18v-2H4v2zm0 5h18v-2H4v2z"/></svg>
+        </button>
+      </div>
+      <div class="sidebar-bottom">
+        <button class="sidebar-btn" data-view="settings" title="Settings">
+          <svg viewBox="0 0 24 24"><path d="M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.07-.94l2.03-1.58c.18-.14.23-.41.12-.61l-1.92-3.32c-.12-.22-.37-.29-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54c-.04-.24-.24-.41-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96c-.22-.08-.47 0-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.05.3-.09.63-.09.94s.02.64.07.94l-2.03 1.58c-.18.14-.23.41-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.6c-1.98 0-3.6-1.62-3.6-3.6s1.62-3.6 3.6-3.6 3.6 1.62 3.6 3.6-1.62 3.6-3.6 3.6z"/></svg>
+        </button>
+      </div>
+    </aside>
+
+    <!-- Main Content Area -->
+    <div class="main-area">
+      <!-- Toolbar -->
+      <header class="toolbar">
+        <div class="toolbar-left">
+          <h1>DCP Screen</h1>
+        </div>
+        <div class="toolbar-right">
+          <button id="theme-toggle" class="toolbar-btn icon" title="Toggle theme">🌙</button>
+        </div>
+      </header>
+
+      <!-- Content panels -->
+      <div class="content">
+        <!-- LIBRARY VIEW -->
+        <div class="view active" id="view-library">
+          <section class="panel">
+            <div class="panel-header">
+              <h2>Library</h2>
+              <div class="panel-actions">
+                <button id="library-refresh" class="btn-sm">Refresh</button>
+                <span id="library-status" class="status-badge">Ready</span>
+              </div>
+            </div>
+            <table class="jobs-table">
+              <thead>
+                <tr><th>Package</th><th>Composition</th><th>Duration</th><th>Standard</th><th></th><th>Verdict</th><th></th></tr>
+              </thead>
+              <tbody id="library-tbody"></tbody>
+            </table>
+          </section>
+        </div>
+
+        <!-- KEYS VIEW -->
+        <div class="view" id="view-keys">
+          <section class="panel">
+            <div class="panel-header">
+              <h2>Keys</h2>
+              <div class="panel-actions">
+                <button id="keys-ingest" class="btn-sm">Add KDM</button>
+                <span id="keys-status" class="status-badge">Ready</span>
+              </div>
+            </div>
+            <table class="jobs-table">
+              <thead>
+                <tr><th>Content</th><th>CPL</th><th>Window</th><th>Fit</th><th>File</th><th></th></tr>
+              </thead>
+              <tbody id="keys-tbody"></tbody>
+            </table>
+          </section>
+        </div>
+
+        <!-- JOBS VIEW -->
+        <div class="view" id="view-jobs">
+          <section class="panel">
+            <div class="panel-header">
+              <h2>Jobs</h2>
+              <div class="panel-actions">
+                <button id="jobs-refresh" class="btn-sm">Refresh</button>
+                <span id="jobs-status" class="status-badge">Ready</span>
+              </div>
+            </div>
+            <table class="jobs-table">
+              <thead>
+                <tr><th>ID</th><th>Source</th><th>Job</th><th>State</th><th>Progress</th><th></th></tr>
+              </thead>
+              <tbody id="jobs-tbody"></tbody>
+            </table>
+          </section>
+        </div>
+
+        <!-- SETTINGS VIEW -->
+        <div class="view" id="view-settings">
+          <section class="panel">
+            <div class="panel-header">
+              <h2>Settings</h2>
+            </div>
+            <form id="settings-form" class="settings-grid">
+              <fieldset>
+                <legend>Library</legend>
+                <div class="prop-field">
+                  <label>Library Folders</label>
+                  <ul id="set-library-roots" class="library-roots"></ul>
+                  <button type="button" id="set-library-roots-add" class="btn-sm">Add Folder</button>
+                </div>
+              </fieldset>
+              <fieldset>
+                <legend>Recipient</legend>
+                <div class="prop-field">
+                  <label for="set-recipient-certificate">Recipient Certificate</label>
+                  <div class="input-with-btn">
+                    <input id="set-recipient-certificate" type="text" placeholder="Select certificate…" readonly>
+                    <button type="button" id="set-recipient-certificate-browse" class="btn-sm">…</button>
+                  </div>
+                </div>
+                <div class="prop-field">
+                  <label for="set-recipient-key">Recipient Private Key</label>
+                  <div class="input-with-btn">
+                    <input id="set-recipient-key" type="text" placeholder="Select private key…" readonly>
+                    <button type="button" id="set-recipient-key-browse" class="btn-sm">…</button>
+                  </div>
+                </div>
+              </fieldset>
+              <div class="form-actions">
+                <button type="submit" class="btn-primary">Save</button>
+              </div>
+            </form>
+          </section>
+        </div>
+      </div>
+
+      <!-- Embedded video. The surface is drawn by the app itself, over this
+           element, so nothing may be painted inside it. -->
+      <div class="preview-panel" id="preview-panel" hidden>
+        <div class="preview-panel-header">
+          <span id="preview-title">Preview</span>
+          <button id="preview-close" class="btn-sm" title="Close preview">✕</button>
+        </div>
+        <div class="preview-surface" id="preview-surface"></div>
+        <div id="preview-controls" class="preview-controls"></div>
+      </div>
+
+      <!-- Global Transport / Scrubber (always visible) -->
+      <div class="timeline-transport" id="global-transport">
+        <!-- guikit wires these by id and writes the skip tooltips from
+             PREVIEW_SEEK_SECONDS -->
+        <button id="timeline-start-btn" class="btn-sm" title="Go to start">⏮</button>
+        <button id="timeline-skip-back-btn" class="btn-sm">⏪</button>
+        <button id="timeline-frame-back-btn" class="btn-sm" title="Step back one frame">◁</button>
+        <button id="timeline-play-btn" class="btn-sm" title="Play/Pause">▶</button>
+        <button id="timeline-frame-forward-btn" class="btn-sm" title="Step forward one frame">▷</button>
+        <button id="timeline-skip-forward-btn" class="btn-sm">⏩</button>
+        <span id="timeline-position" class="timecode">00:00:00:00</span>
+        <div id="timeline-scrubber" class="timeline-scrubber">
+          <div class="timeline-scrubber-track">
+            <div id="timeline-playhead" class="timeline-playhead" style="left: 0%"></div>
+          </div>
+        </div>
+        <span id="timeline-duration" class="timecode" data-raw="0">00:00:00:00</span>
+      </div>
+
+      <footer class="bottom-bar">
+        <div class="status-section">
+          <span id="status-text" class="status-text">Ready</span>
+        </div>
+      </footer>
+    </div>
+  </div>
+  <script type="module" src="/src/main.js"></script>
+</body>
+</html>
