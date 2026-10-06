@@ -101,6 +101,7 @@ pub fn run() {
             guikit::preview::preview_set_decode_scale,
             guikit::preview::preview_set_subtitle_file,
             guikit::preview::preview_set_subtitle_visibility,
+            guikit::preview::preview_set_subtitle_language,
             guikit::preview::player_controls::preview_set_picture,
             guikit::preview::player_controls::preview_set_sound_device,
             guikit::preview::player_controls::preview_set_sound_layout,

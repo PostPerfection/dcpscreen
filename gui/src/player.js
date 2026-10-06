@@ -10,6 +10,13 @@ import {
 import { fullscreenMonitor } from "./player-monitor.js";
 import { holdCountdownText, playlistHudText } from "./screening-playlist.js";
 import { nextStereoMode, stereoHudText } from "./stereo-output.js";
+import {
+  nextSubtitleLanguage,
+  nextSubtitleVisibility,
+  SUBTITLE_SLOTS,
+  subtitleHudText,
+  subtitleLanguageHudText,
+} from "./subtitle-toggle.js";
 import { AUTOMATIC_RESOLUTION, decodeScaleHudText, nextPicker, startPicker, startingScale } from "./decode-scale-picker.js";
 
 const MAIN_WINDOW_LABEL = "main";
@@ -34,6 +41,8 @@ const playlistRowCurrent = document.getElementById("player-row-current");
 const playlistRowNext = document.getElementById("player-row-next");
 const holdCountdown = document.getElementById("player-hold-countdown");
 const stereoButton = document.getElementById("player-stereo-btn");
+const subtitlesButton = document.getElementById("player-subtitles-btn");
+const subtitleLanguageButton = document.getElementById("player-subtitle-language-btn");
 const decodeScaleLabel = document.getElementById("player-decode-scale");
 // the main page sends the CPU Decode Resolution choice at startup and when Settings are saved
 const CPU_DECODE_RESOLUTION_EVENT = "cpu-decode-resolution-changed";
@@ -176,7 +185,33 @@ async function useCpuDecodeResolution(resolution) {
   await applyDecodeScale(startingScale(resolution, await invoke("gpu_active")));
 }
 
+// the metadata the subtitle button last showed, which its click toggles from
+let subtitleMetadata = {};
+
+function showSubtitleTracks(meta) {
+  subtitleMetadata = meta;
+  const text = subtitleHudText(meta);
+  subtitlesButton.hidden = !text;
+  subtitlesButton.textContent = text ?? "";
+  const languageText = subtitleLanguageHudText(meta);
+  subtitleLanguageButton.hidden = !languageText;
+  subtitleLanguageButton.textContent = languageText ?? "";
+}
+
+subtitleLanguageButton.addEventListener("click", () => {
+  const next = nextSubtitleLanguage(subtitleMetadata);
+  if (!next) return;
+  invoke("preview_set_subtitle_language", { track: next.slot, language: next.language }).catch(reportFailure);
+});
+
+subtitlesButton.addEventListener("click", () => {
+  const visible = nextSubtitleVisibility(subtitleMetadata);
+  Promise.all(SUBTITLE_SLOTS.map((track) => invoke("preview_set_subtitle_visibility", { track, visible })))
+    .catch(reportFailure);
+});
+
 async function followMetadata(meta) {
+  showSubtitleTracks(meta);
   const stereoMode = meta.stereoscopic ? await invoke("preview_stereo_output") : null;
   showStereoOutput(stereoMode);
   await pickDecodeScale(meta, stereoMode);
