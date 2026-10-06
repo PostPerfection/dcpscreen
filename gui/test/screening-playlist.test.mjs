@@ -2,6 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   formatCountdown,
+  holdCountdownText,
   newPlaylist,
   playlistHudText,
   rowTitle,
@@ -87,8 +88,9 @@ test('the HUD names the row on screen and what comes next and when', () => {
     secondsToNextStart: 61,
     errors: [],
   };
-  assert.deepEqual(playlistHudText(holding), { current: 'Intermission, 300 s', next: 'Next: Feature in 1:01' });
-  assert.deepEqual(playlistHudText({ ...holding, currentTitle: null }), { current: 'Waiting', next: 'Next: Feature in 1:01' });
+  assert.deepEqual(playlistHudText(holding), { current: 'Intermission, 300 s', next: 'Next: Feature' });
+  assert.deepEqual(playlistHudText({ ...holding, currentTitle: null }), { current: 'Waiting', next: 'Next: Feature' });
+  assert.deepEqual(playlistHudText({ ...holding, activity: 'playing' }), { current: 'Intermission, 300 s', next: 'Next: Feature in 1:01' });
   assert.deepEqual(playlistHudText({ ...holding, activity: 'playing', nextTitle: null }), { current: 'Intermission, 300 s', next: '' });
   assert.equal(playlistHudText({ ...holding, activity: 'finished' }), null);
   assert.equal(playlistHudText(null), null);
@@ -100,4 +102,12 @@ test('the runner status line carries the errors', () => {
   assert.equal(runnerStatusText(null), 'Not playing');
   const playing = { playlistName: 'Evening', activity: 'playing', currentTitle: 'Trailer', nextTitle: 'Feature', secondsToNextStart: 90, errors: [] };
   assert.equal(runnerStatusText(playing), 'Evening: playing Trailer, next: Feature in 1:30');
+  assert.equal(runnerStatusText({ ...playing, activity: 'holding' }), 'Evening: holding Trailer, next: Feature, 1:30 left');
+});
+
+test('a hold counts down in the transport, and nothing else does', () => {
+  const holding = { playlistName: 'Evening', activity: 'holding', secondsToNextStart: 61, errors: [] };
+  assert.equal(holdCountdownText(holding), '1:01 left');
+  assert.equal(holdCountdownText({ ...holding, activity: 'playing' }), null);
+  assert.equal(holdCountdownText(null), null);
 });

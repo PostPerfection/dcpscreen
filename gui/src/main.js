@@ -32,6 +32,8 @@ const DEFAULT_PLAYLIST_NAME = "Playlist";
 const PLAYLIST_SAVED_STATUS = "Playlist saved";
 const PLAYLIST_POLL_INTERVAL_MS = 1000;
 const SECONDS_PER_MINUTE = 60;
+// hides the placeholder date WebKit draws in an empty field
+const EMPTY_START_TIME_CLASS = "start-time-empty";
 const MOVE_UP = -1;
 const MOVE_DOWN = 1;
 const PLAY_SOURCE_READY = "ready";
@@ -217,6 +219,7 @@ function playlistRowElement(row, index, expectedStart) {
   startTime.type = "datetime-local";
   startTime.step = "1";
   startTime.value = row.startTime ?? "";
+  startTime.classList.toggle(EMPTY_START_TIME_CLASS, !startTime.value);
   startTime.addEventListener("change", reportingErrors(() => editPlaylist(withStartTime(currentPlaylist, index, startTime.value))));
   const actions = [
     rowButton("↑", "Move up", () => editPlaylist(withRowMoved(currentPlaylist, index, MOVE_UP))),

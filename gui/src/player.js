@@ -7,7 +7,7 @@ import {
   watchPreviewMetadata,
 } from "../../extern/guikit/src/preview.js";
 import { fullscreenMonitor } from "./player-monitor.js";
-import { playlistHudText } from "./screening-playlist.js";
+import { holdCountdownText, playlistHudText } from "./screening-playlist.js";
 
 const MAIN_WINDOW_LABEL = "main";
 const HUD_IDLE_TIMEOUT_MS = 3000;
@@ -18,6 +18,8 @@ const PLAY_PAUSE_KEY = " ";
 const FULLSCREEN_TOGGLE_KEYS = ["f", "F"];
 const PLAYLIST_POLL_INTERVAL_MS = 500;
 const HOLDING_ACTIVITY = "holding";
+// hides the transport of the composition that played before the hold
+const HOLDING_CLASS = "player-holding";
 
 const playerWindow = getCurrentWindow();
 const hud = document.getElementById("player-hud");
@@ -27,6 +29,7 @@ const holdStill = document.getElementById("player-hold-still");
 const playlistRow = document.getElementById("player-row");
 const playlistRowCurrent = document.getElementById("player-row-current");
 const playlistRowNext = document.getElementById("player-row-next");
+const holdCountdown = document.getElementById("player-hold-countdown");
 let paused = false;
 // in page coordinates, null once a resize has moved the page under the pointer
 let lastPointer = null;
@@ -93,7 +96,7 @@ async function toggleFullscreen() {
 window.addEventListener("keydown", (event) => {
   if (event.key === PLAY_PAUSE_KEY) {
     event.preventDefault();
-    previewPlayPause();
+    if (!document.body.classList.contains(HOLDING_CLASS)) previewPlayPause();
     return;
   }
   if (event.key === LEAVE_FULLSCREEN_KEY) {
@@ -134,8 +137,11 @@ function showHold(stillImage) {
 
 async function showPlaylistState() {
   const state = await invoke("playlist_state");
-  if (state?.activity === HOLDING_ACTIVITY) showHold(state.stillImage);
+  const holding = state?.activity === HOLDING_ACTIVITY;
+  if (holding) showHold(state.stillImage);
   else hold.hidden = true;
+  document.body.classList.toggle(HOLDING_CLASS, holding);
+  holdCountdown.textContent = holdCountdownText(state) ?? "";
   const text = playlistHudText(state);
   playlistRow.hidden = !text;
   if (!text) return;

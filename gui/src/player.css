@@ -64,3 +64,19 @@ body.player-cursor-hidden * {
 .player-row-next {
   color: var(--text-muted);
 }
+
+.player-hold-countdown {
+  display: none;
+  flex: 1;
+}
+
+body.player-holding .player-hold-countdown {
+  display: inline;
+}
+
+body.player-holding #timeline-play-btn,
+body.player-holding #timeline-position,
+body.player-holding #timeline-scrubber,
+body.player-holding #timeline-duration {
+  display: none;
+}

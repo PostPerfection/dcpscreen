@@ -61,3 +61,6 @@
 .playlist-intermission input[type="text"] {
   flex: 1;
 }
+.start-time-empty:not(:focus)::-webkit-datetime-edit {
+  visibility: hidden;
+}

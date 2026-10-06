@@ -5,6 +5,8 @@ const SECONDS_PER_MINUTE = 60;
 const SECONDS_PER_HOUR = 3600;
 const LOCAL_TIME_SEPARATOR = "T";
 const WAITING_TITLE = "Waiting";
+const PLAYING_ACTIVITY = "playing";
+const HOLDING_ACTIVITY = "holding";
 
 export function newPlaylist(name) {
   return { version: PLAYLIST_FORMAT_VERSION, name, rows: [] };
@@ -79,13 +81,20 @@ export function warningText(warning) {
   return `Row ${row} is set for ${displayTime(warning.startTime)} but cannot start before ${displayTime(warning.earliestStart)}`;
 }
 
-// null when no playlist is running
+// null when no playlist is running, a hold puts its countdown in the transport instead
 export function playlistHudText(state) {
-  if (!state || (state.activity !== "playing" && state.activity !== "holding")) return null;
+  if (!state || (state.activity !== PLAYING_ACTIVITY && state.activity !== HOLDING_ACTIVITY)) return null;
   const current = state.currentTitle ?? WAITING_TITLE;
   if (state.nextTitle === null) return { current, next: "" };
-  const countdown = state.secondsToNextStart === null ? "" : ` in ${formatCountdown(state.secondsToNextStart)}`;
+  const counting = state.activity === PLAYING_ACTIVITY && state.secondsToNextStart !== null;
+  const countdown = counting ? ` in ${formatCountdown(state.secondsToNextStart)}` : "";
   return { current, next: `Next: ${state.nextTitle}${countdown}` };
+}
+
+// null unless a playlist is holding black or a still
+export function holdCountdownText(state) {
+  if (state?.activity !== HOLDING_ACTIVITY) return null;
+  return `${formatCountdown(state.secondsToNextStart ?? 0)} left`;
 }
 
 export function runnerStatusText(state) {
@@ -94,5 +103,7 @@ export function runnerStatusText(state) {
   const hud = playlistHudText(state);
   if (!hud) return `${state.playlistName}: ${state.activity}${errors}`;
   const next = hud.next ? `, ${hud.next.charAt(0).toLowerCase()}${hud.next.slice(1)}` : "";
-  return `${state.playlistName}: ${state.activity} ${hud.current}${next}${errors}`;
+  const holdLeft = holdCountdownText(state);
+  const left = holdLeft ? `, ${holdLeft}` : "";
+  return `${state.playlistName}: ${state.activity} ${hud.current}${next}${left}${errors}`;
 }
