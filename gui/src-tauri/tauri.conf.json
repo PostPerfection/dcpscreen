@@ -1,0 +1,33 @@
+{
+  "$schema": "https://raw.githubusercontent.com/tauri-apps/tauri/dev/crates/tauri-cli/schema.json",
+  "productName": "DCP Screen",
+  "version": "0.1.0",
+  "identifier": "com.dcpscreen.desktop",
+  "build": {
+    "frontendDist": "../dist",
+    "devUrl": "http://localhost:1422",
+    "beforeDevCommand": "pnpm dev",
+    "beforeBuildCommand": "pnpm build"
+  },
+  "app": {
+    "windows": [],
+    "security": {
+      "csp": "default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src 'self' ipc: http://ipc.localhost http://127.0.0.1:*; img-src 'self' asset: https://asset.localhost; media-src 'self' http://127.0.0.1:* blob:",
+      "assetProtocol": {
+        "enable": true,
+        "scope": [
+          "/**"
+        ]
+      }
+    }
+  },
+  "bundle": {
+    "active": false,
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.png"
+    ]
+  }
+}
