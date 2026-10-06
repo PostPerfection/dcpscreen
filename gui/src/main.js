@@ -10,13 +10,23 @@ import { initGpuSettings, fillGpuSettings, gpuSettingsFromForm, uncheckGpu, appl
 import { settingsFromFields, withLibraryRoot, withoutLibraryRoot } from "./settings-form.js";
 import { playRefusalText } from "./play-refusal.js";
 import {
+  IN_POINT,
+  OUT_POINT,
+  compositionLengths,
   displayTime,
+  formatTimecode,
+  frameAtPosition,
+  isSameComposition,
   newPlaylist,
+  parseTimecode,
+  rangeFrameCount,
+  rowLength,
   rowTitle,
   runnerStatusText,
   warningText,
   withComposition,
   withIntermission,
+  withRangePoint,
   withRowMoved,
   withStartTime,
   withoutRow,
@@ -25,6 +35,7 @@ import { playerMonitorChoices } from "./player-monitor.js";
 import {
   DISPLAY_PROFILE_COMMAND,
   displayProfileChoices,
+  fillPlayerControlFields,
   playerControlCommands,
   playerControlsFromFields,
   playerWarningText,
@@ -46,6 +57,12 @@ const SECONDS_PER_MINUTE = 60;
 // hides the placeholder date WebKit draws in an empty field
 const EMPTY_START_TIME_CLASS = "start-time-empty";
 const MOVE_UP = -1;
+const PLAYING_ACTIVITY = "playing";
+const SET_FROM_PLAYER_CLASS = "btn-set-from-player";
+const IN_PLACEHOLDER = "start";
+const OUT_PLACEHOLDER = "end";
+const SET_IN_TITLE = "Start the row at the frame on screen";
+const SET_OUT_TITLE = "End the row before the frame on screen";
 const MOVE_DOWN = 1;
 const PLAY_SOURCE_READY = "ready";
 const PLAY_REFUSAL_TITLE = "No KDM fits";
@@ -57,10 +74,8 @@ const PLAYER_WINDOW_LABEL = "player";
 // the Rust side sends it when the window manager closes the player window
 const PLAYER_CLOSE_REQUESTED_EVENT = "player-close-requested";
 const MAIN_WINDOW_MONITOR_TEXT = "Same as the main window";
-const DEFAULT_SOUND_DEVICE_TEXT = "Default";
 const READY_STATUS = "Ready";
 const BRIGHTNESS_DECIMALS = 2;
-const DEFAULT_SUBTITLE_COLOUR = "#ffffff";
 const SETTINGS_LOCKED = "locked";
 const SETTINGS_UNLOCKED_STATUS = "Settings unlocked";
 const SETTINGS_LOCKED_STATUS = "Settings locked";
@@ -80,6 +95,7 @@ const playerFields = {
   maskRight: document.getElementById("set-player-mask-right"),
   scaling: document.getElementById("set-player-scaling"),
   soundDevice: document.getElementById("set-player-sound-device"),
+  soundDeviceError: document.getElementById("set-player-sound-device-error"),
   soundLayout: document.getElementById("set-player-sound-layout"),
   soundDelayMilliseconds: document.getElementById("set-player-sound-delay"),
   subtitleOffsetPercent: document.getElementById("set-player-subtitle-offset"),
@@ -211,6 +227,12 @@ const playlistFields = {
   intermissionStill: document.getElementById("playlist-intermission-still"),
 };
 let currentPlaylist = newPlaylist(DEFAULT_PLAYLIST_NAME);
+// the copy the runner was started with, its row numbers are the ones the runner state gives
+let playingPlaylist = null;
+let latestRunnerState = null;
+// seconds from the loaded row's in frame, null while nothing plays
+let latestPlayerPosition = null;
+let libraryLengths = new Map();
 
 function rowButton(text, title, onClick) {
   const button = document.createElement("button");
@@ -228,6 +250,53 @@ function cell(...children) {
   return td;
 }
 
+function rangeInput(row, index, point, length) {
+  const input = document.createElement("input");
+  input.type = "text";
+  input.className = "playlist-timecode";
+  input.placeholder = point === IN_POINT ? IN_PLACEHOLDER : OUT_PLACEHOLDER;
+  input.value = row[point] === undefined ? "" : formatTimecode(row[point], length.framesPerSecond);
+  input.addEventListener("change", reportingErrors(() =>
+    editPlaylist(withRangePoint(currentPlaylist, index, point, parseTimecode(input.value, length.framesPerSecond)))));
+  return input;
+}
+
+// the runner's row, while this row of the view is the composition it plays
+function playingRunnerRow(index) {
+  if (latestRunnerState?.activity !== PLAYING_ACTIVITY || !playingPlaylist) return null;
+  const runnerRow = playingPlaylist.rows[latestRunnerState.currentRow];
+  return isSameComposition(runnerRow, currentPlaylist.rows[index]) && latestRunnerState.currentRow === index ? runnerRow : null;
+}
+
+function setFromPlayerButton(text, title, index, point, length) {
+  const button = rowButton(text, title, () => {
+    const runnerRow = playingRunnerRow(index);
+    if (!runnerRow || latestPlayerPosition === null) return;
+    const frame = frameAtPosition(runnerRow, latestPlayerPosition, length.framesPerSecond);
+    return editPlaylist(withRangePoint(currentPlaylist, index, point, frame));
+  });
+  button.classList.add(SET_FROM_PLAYER_CLASS);
+  button.dataset.row = String(index);
+  button.disabled = !playingRunnerRow(index);
+  return button;
+}
+
+function rangeCells(row, index) {
+  const length = rowLength(libraryLengths, row);
+  if (!length) return [cell(), cell(), cell()];
+  return [
+    cell(rangeInput(row, index, IN_POINT, length), setFromPlayerButton("Set", SET_IN_TITLE, index, IN_POINT, length)),
+    cell(rangeInput(row, index, OUT_POINT, length), setFromPlayerButton("Set", SET_OUT_TITLE, index, OUT_POINT, length)),
+    cell(formatTimecode(rangeFrameCount(row, length.frameCount), length.framesPerSecond)),
+  ];
+}
+
+function enableSetFromPlayerButtons() {
+  document.querySelectorAll(`.${SET_FROM_PLAYER_CLASS}`).forEach((button) => {
+    button.disabled = !playingRunnerRow(Number(button.dataset.row));
+  });
+}
+
 function playlistRowElement(row, index, expectedStart) {
   const startTime = document.createElement("input");
   startTime.type = "datetime-local";
@@ -242,12 +311,20 @@ function playlistRowElement(row, index, expectedStart) {
     rowButton("Play from here", "Play the playlist from this row", () => playPlaylist(index)),
   ];
   const tr = document.createElement("tr");
-  tr.append(cell(String(index + 1)), cell(rowTitle(row)), cell(startTime), cell(expectedStart ? displayTime(expectedStart) : ""), cell(...actions));
+  tr.append(
+    cell(String(index + 1)),
+    cell(rowTitle(row)),
+    ...rangeCells(row, index),
+    cell(startTime),
+    cell(expectedStart ? displayTime(expectedStart) : ""),
+    cell(...actions),
+  );
   return tr;
 }
 
 async function renderPlaylist() {
   playlistFields.name.value = currentPlaylist.name;
+  libraryLengths = compositionLengths((await invoke("library_list")).packages);
   const plan = await invoke("playlist_plan", { playlist: currentPlaylist, fromRow: 0 });
   const expectedStarts = new Map(plan.rows.map((planned) => [planned.row, planned.expectedStart]));
   playlistFields.rows.replaceChildren(...currentPlaylist.rows.map((row, index) => playlistRowElement(row, index, expectedStarts.get(index))));
@@ -275,13 +352,16 @@ async function addToPlaylist(libraryPackage, composition) {
 
 async function playPlaylist(fromRow) {
   await showPlayerWindow();
+  playingPlaylist = currentPlaylist;
   const state = await invoke("playlist_play", { playlist: currentPlaylist, fromRow });
   enablePreviewTransport();
   playlistFields.runnerStatus.textContent = runnerStatusText(state);
 }
 
 async function showRunnerState() {
-  playlistFields.runnerStatus.textContent = runnerStatusText(await invoke("playlist_state"));
+  latestRunnerState = await invoke("playlist_state");
+  playlistFields.runnerStatus.textContent = runnerStatusText(latestRunnerState);
+  enableSetFromPlayerButtons();
 }
 
 playlistFields.name.addEventListener("change", () => {
@@ -404,26 +484,12 @@ function enableSubtitleColour() {
   playerFields.subtitleColour.disabled = !playerFields.subtitleColourOverridden.checked;
 }
 
-async function fillPlayerControls({ playerPicture, playerSound, playerSubtitles, playerDisplayProfile }) {
-  playerFields.displayProfile.value = playerDisplayProfile ?? "";
-  playerFields.brightness.value = playerPicture.brightness;
+async function fillPlayerControls(settings) {
+  await fillPlayerControlFields(playerFields, settings, {
+    listSoundDevices: () => invoke("preview_sound_devices"),
+    makeOption: choiceOption,
+  });
   showBrightness();
-  playerFields.maskTop.value = playerPicture.masksPercent.top;
-  playerFields.maskBottom.value = playerPicture.masksPercent.bottom;
-  playerFields.maskLeft.value = playerPicture.masksPercent.left;
-  playerFields.maskRight.value = playerPicture.masksPercent.right;
-  playerFields.scaling.value = playerPicture.scaling;
-  const devices = soundDeviceChoices(await invoke("preview_sound_devices"), playerSound.device);
-  playerFields.soundDevice.replaceChildren(
-    choiceOption("", DEFAULT_SOUND_DEVICE_TEXT),
-    ...devices.map((device) => choiceOption(device.name, device.label)),
-  );
-  playerFields.soundDevice.value = playerSound.device ?? "";
-  playerFields.soundLayout.value = playerSound.layout;
-  playerFields.soundDelayMilliseconds.value = playerSound.delayMilliseconds;
-  playerFields.subtitleOffsetPercent.value = playerSubtitles.offsetPercent;
-  playerFields.subtitleColourOverridden.checked = playerSubtitles.colour !== null;
-  playerFields.subtitleColour.value = playerSubtitles.colour ?? DEFAULT_SUBTITLE_COLOUR;
   enableSubtitleColour();
 }
 
@@ -593,7 +659,10 @@ playerFields.colordProfiles.addEventListener("change", () => {
 });
 playerMonitorSelect.addEventListener("change", reportingErrors(fillColordProfiles));
 playerFields.subtitleColourOverridden.addEventListener("change", enableSubtitleColour);
-watchPreviewMetadata(showPlayerWarnings);
+watchPreviewMetadata((metadata) => {
+  latestPlayerPosition = metadata.position ?? null;
+  showPlayerWarnings(metadata);
+});
 
 initGpuSettings();
 initPreview();

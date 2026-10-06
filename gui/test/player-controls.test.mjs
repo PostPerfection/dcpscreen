@@ -2,6 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   displayProfileChoices,
+  fillPlayerControlFields,
   playerControlCommands,
   playerControlsFromFields,
   playerWarningText,
@@ -95,4 +96,68 @@ test('warnings read as one status line, none as nothing', () => {
     playerWarningText(['output device X is missing, sound plays on the default device', 'the device has no 7.1']),
     'Player: output device X is missing, sound plays on the default device. the device has no 7.1',
   );
+});
+
+function fakeField() {
+  return {
+    value: '',
+    checked: false,
+    textContent: '',
+    hidden: true,
+    options: [],
+    replaceChildren(...options) {
+      this.options = options;
+    },
+  };
+}
+
+function fakeFields() {
+  const names = ['displayProfile', 'brightness', 'maskTop', 'maskBottom', 'maskLeft', 'maskRight', 'scaling',
+    'soundDevice', 'soundDeviceError', 'soundLayout', 'soundDelayMilliseconds', 'subtitleOffsetPercent',
+    'subtitleColourOverridden', 'subtitleColour'];
+  return Object.fromEntries(names.map((name) => [name, fakeField()]));
+}
+
+const SAVED = {
+  playerPicture: { brightness: 1.5, masksPercent: { top: 5, bottom: 5, left: 0, right: 2.5 }, scaling: 'fill' },
+  playerSound: { device: 'HDMI 1', layout: 'fivePointOne', delayMilliseconds: -40 },
+  playerSubtitles: { offsetPercent: 4, colour: '#ffcc00' },
+  playerDisplayProfile: '/profiles/booth.icc',
+};
+const makeOption = (value, text) => ({ value, text });
+
+test('a sound device list that fails still fills every field and says why under the device', async () => {
+  const fields = fakeFields();
+
+  await fillPlayerControlFields(fields, SAVED, {
+    listSoundDevices: async () => { throw new Error('ALSA function snd_device_name_hint failed'); },
+    makeOption,
+  });
+
+  assert.equal(fields.displayProfile.value, '/profiles/booth.icc');
+  assert.equal(fields.brightness.value, 1.5);
+  assert.equal(fields.maskRight.value, 2.5);
+  assert.equal(fields.scaling.value, 'fill');
+  assert.equal(fields.soundLayout.value, 'fivePointOne');
+  assert.equal(fields.soundDelayMilliseconds.value, -40);
+  assert.equal(fields.subtitleOffsetPercent.value, 4);
+  assert.equal(fields.subtitleColourOverridden.checked, true);
+  assert.equal(fields.subtitleColour.value, '#ffcc00');
+  assert.equal(fields.soundDevice.value, 'HDMI 1');
+  assert.deepEqual(fields.soundDevice.options.map((option) => option.value), ['', 'HDMI 1']);
+  assert.equal(fields.soundDeviceError.hidden, false);
+  assert.equal(
+    fields.soundDeviceError.textContent,
+    'The sound devices could not be listed: Error: ALSA function snd_device_name_hint failed',
+  );
+});
+
+test('a sound device list that works fills the choices and hides the error', async () => {
+  const fields = fakeFields();
+  fields.soundDeviceError.hidden = false;
+
+  await fillPlayerControlFields(fields, SAVED, { listSoundDevices: async () => ['HDMI 1', 'Speakers'], makeOption });
+
+  assert.deepEqual(fields.soundDevice.options.map((option) => option.value), ['', 'HDMI 1', 'Speakers']);
+  assert.equal(fields.soundDeviceError.hidden, true);
 });

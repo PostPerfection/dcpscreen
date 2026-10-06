@@ -3,6 +3,9 @@ import { withSavedChoice } from "./saved-choices.js";
 const WARNING_PREFIX = "Player: ";
 const WARNING_SEPARATOR = ". ";
 export const DISPLAY_PROFILE_COMMAND = "preview_set_display_profile";
+const DEFAULT_SOUND_DEVICE_TEXT = "Default";
+const DEFAULT_SUBTITLE_COLOUR = "#ffffff";
+const SOUND_DEVICES_FAILED_TEXT = "The sound devices could not be listed";
 
 export function playerControlsFromFields({
   brightness,
@@ -88,4 +91,33 @@ export function soundDeviceChoices(deviceNames, savedDevice) {
 export function playerWarningText(warnings) {
   if (!warnings || warnings.length === 0) return null;
   return WARNING_PREFIX + warnings.join(WARNING_SEPARATOR);
+}
+
+// every field fills on its own, and a device list that fails leaves the saved device and says why
+export async function fillPlayerControlFields(fields, settings, { listSoundDevices, makeOption }) {
+  const { playerPicture, playerSound, playerSubtitles, playerDisplayProfile } = settings;
+  fields.displayProfile.value = playerDisplayProfile ?? "";
+  fields.brightness.value = playerPicture.brightness;
+  fields.maskTop.value = playerPicture.masksPercent.top;
+  fields.maskBottom.value = playerPicture.masksPercent.bottom;
+  fields.maskLeft.value = playerPicture.masksPercent.left;
+  fields.maskRight.value = playerPicture.masksPercent.right;
+  fields.scaling.value = playerPicture.scaling;
+  fields.soundLayout.value = playerSound.layout;
+  fields.soundDelayMilliseconds.value = playerSound.delayMilliseconds;
+  fields.subtitleOffsetPercent.value = playerSubtitles.offsetPercent;
+  fields.subtitleColourOverridden.checked = playerSubtitles.colour !== null;
+  fields.subtitleColour.value = playerSubtitles.colour ?? DEFAULT_SUBTITLE_COLOUR;
+  const listing = await listSoundDevices().then(
+    (names) => ({ names, error: null }),
+    (error) => ({ names: [], error: `${SOUND_DEVICES_FAILED_TEXT}: ${error}` }),
+  );
+  const devices = soundDeviceChoices(listing.names, playerSound.device);
+  fields.soundDevice.replaceChildren(
+    makeOption("", DEFAULT_SOUND_DEVICE_TEXT),
+    ...devices.map((device) => makeOption(device.name, device.label)),
+  );
+  fields.soundDevice.value = playerSound.device ?? "";
+  fields.soundDeviceError.textContent = listing.error ?? "";
+  fields.soundDeviceError.hidden = listing.error === null;
 }

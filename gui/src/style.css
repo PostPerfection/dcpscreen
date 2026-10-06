@@ -69,3 +69,7 @@
   font-size: 12px;
   color: var(--error, #dc2626);
 }
+.playlist-timecode {
+  width: 7.5em;
+  font-family: var(--font-mono, monospace);
+}

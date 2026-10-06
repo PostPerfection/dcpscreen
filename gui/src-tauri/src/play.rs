@@ -180,6 +180,7 @@ mod tests {
     };
     use chrono::{DateTime, Duration, SubsecRound, Utc};
     use guikit::preview::screening_runner::{PlayerStatus, RunnerPlayer, ScreeningRun};
+    use postkit::grok_player::SourceOptions;
     use postkit::screening_playlist::{PlaylistRow, RowItem, ScreeningPlaylist};
     use serde_json::json;
     use std::cell::RefCell;
@@ -455,19 +456,16 @@ mod tests {
     }
 
     impl RunnerPlayer for RecordingPlayer {
-        fn load(&self, source: RowSource) -> Result<(), String> {
-            self.status.borrow_mut().source = Some(source.cpl_path.display().to_string());
+        fn load(&self, source: &Path, options: SourceOptions) -> Result<(), String> {
+            self.status.borrow_mut().source = Some(source.display().to_string());
             self.loads
                 .borrow_mut()
-                .push((source.cpl_path, source.other_packages));
+                .push((source.to_path_buf(), options.other_packages));
             Ok(())
         }
 
-        fn queue_next(&self, source: RowSource) -> Result<(), String> {
-            Err(format!(
-                "{} queued with no row after it",
-                source.cpl_path.display()
-            ))
+        fn queue_next(&self, source: &Path, _options: SourceOptions) -> Result<(), String> {
+            Err(format!("{} queued with no row after it", source.display()))
         }
 
         fn stop(&self) -> Result<(), String> {
@@ -489,6 +487,8 @@ mod tests {
                 package_directory: fixture.version_file.clone(),
                 cpl_id: uuid(FEATURE_ID),
                 title: FEATURE.title.to_string(),
+                in_frame: None,
+                out_frame: None,
             },
         }];
         let library = fixture.library.clone();

@@ -1,7 +1,16 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
+  IN_POINT,
+  OUT_POINT,
+  compositionLengths,
   formatCountdown,
+  formatTimecode,
+  frameAtPosition,
+  parseTimecode,
+  rangeFrameCount,
+  rowLength,
+  withRangePoint,
   holdCountdownText,
   newPlaylist,
   playlistHudText,
@@ -29,7 +38,7 @@ function evening() {
 
 test('rows are added in the shape the playlist file holds', () => {
   assert.deepEqual(evening(), {
-    version: 1,
+    version: 2,
     name: 'Evening',
     rows: [
       { kind: 'composition', packageDirectory: '/library/Trailer', cplId: TRAILER.id, title: 'Trailer' },
@@ -110,4 +119,57 @@ test('a hold counts down in the transport, and nothing else does', () => {
   assert.equal(holdCountdownText(holding), '1:01 left');
   assert.equal(holdCountdownText({ ...holding, activity: 'playing' }), null);
   assert.equal(holdCountdownText(null), null);
+});
+
+test('timecode reads and writes frames at the composition rate', () => {
+  assert.equal(formatTimecode(0, 24), '00:00:00:00');
+  assert.equal(formatTimecode(89356, 24), '01:02:03:04');
+  assert.equal(formatTimecode(1499, 25), '00:00:59:24');
+  assert.equal(parseTimecode('01:02:03:04', 24), 89356);
+  assert.equal(parseTimecode(' 00:00:59:24 ', 25), 1499);
+  assert.equal(parseTimecode('', 24), null);
+  assert.equal(parseTimecode(formatTimecode(123456, 48), 48), 123456);
+});
+
+test('a timecode that is not HH:MM:SS:FF inside the rate is refused', () => {
+  for (const text of ['00:00:00:24', '00:60:00:00', '00:00:60:00', '1:02:03', 'tonight']) {
+    assert.throws(() => parseTimecode(text, 24), /is not a timecode HH:MM:SS:FF at 24 frames a second/, text);
+  }
+});
+
+test('in and out points are set and cleared one at a time, and the length follows them', () => {
+  let playlist = evening();
+  playlist = withRangePoint(playlist, 0, IN_POINT, 24);
+  playlist = withRangePoint(playlist, 0, OUT_POINT, 72);
+  assert.equal(playlist.rows[0].inFrame, 24);
+  assert.equal(playlist.rows[0].outFrame, 72);
+  assert.equal(rangeFrameCount(playlist.rows[0], 240), 48);
+
+  playlist = withRangePoint(playlist, 0, IN_POINT, null);
+  assert.equal('inFrame' in playlist.rows[0], false);
+  assert.equal(rangeFrameCount(playlist.rows[0], 240), 72);
+  assert.equal(rangeFrameCount(playlist.rows[2], 240), 240);
+  assert.equal(rangeFrameCount(withRangePoint(playlist, 0, OUT_POINT, 480).rows[0], 240), 240);
+});
+
+test('the frame on screen counts from the in frame the row was loaded with', () => {
+  assert.equal(frameAtPosition({ kind: 'composition', inFrame: 240 }, 2.5, 24), 300);
+  assert.equal(frameAtPosition({ kind: 'composition' }, 2.5, 24), 60);
+});
+
+test('a row finds its frame count and rate in the library listing', () => {
+  const lengths = compositionLengths([
+    { directory: '/library/Trailer', compositions: [{ id: TRAILER.id, durationFrames: 3600, editRate: [25, 1] }] },
+  ]);
+  const [trailer, intermission, feature] = evening().rows;
+  assert.deepEqual(rowLength(lengths, trailer), { frameCount: 3600, framesPerSecond: 25 });
+  assert.equal(rowLength(lengths, intermission), undefined);
+  assert.equal(rowLength(lengths, feature), undefined);
+});
+
+test('a range outside the composition reads as a sentence', () => {
+  assert.equal(
+    warningText({ kind: 'rangeOutsideComposition', row: 0, inFrame: 216, outFrame: 480, frameCount: 240 }),
+    'Row 1: frames 216 to 480 are not inside the composition, which is 240 frames long',
+  );
 });

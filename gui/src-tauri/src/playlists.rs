@@ -2,7 +2,9 @@ use crate::library::LibraryState;
 use crate::play::row_source;
 use guikit::preview::screening_runner::{RunnerState, ScreeningRunner};
 use postkit::package_library::Library;
-use postkit::screening_playlist::{plan, PlaylistPlan, ScreeningPlaylist};
+use postkit::screening_playlist::{
+    plan, CompositionLength, PlaylistPlan, ScreeningPlaylist, PLAYLIST_FORMAT_VERSION,
+};
 use std::path::{Path, PathBuf};
 use tauri::Manager;
 
@@ -50,7 +52,11 @@ pub fn playlist_names(directory: &Path) -> Result<Vec<String>, String> {
     Ok(names)
 }
 
-fn composition_seconds(library: &Library, directory: &Path, cpl_id: uuid::Uuid) -> Option<f64> {
+fn composition_length(
+    library: &Library,
+    directory: &Path,
+    cpl_id: uuid::Uuid,
+) -> Option<CompositionLength> {
     let composition = library
         .entry(directory)?
         .package
@@ -58,10 +64,13 @@ fn composition_seconds(library: &Library, directory: &Path, cpl_id: uuid::Uuid) 
         .iter()
         .find(|composition| composition.id == cpl_id)?;
     let (numerator, denominator) = composition.edit_rate;
-    if numerator == 0 {
+    if numerator == 0 || denominator == 0 {
         return None;
     }
-    Some(composition.duration_frames as f64 * f64::from(denominator) / f64::from(numerator))
+    Some(CompositionLength {
+        frame_count: composition.duration_frames,
+        frames_per_second: f64::from(numerator) / f64::from(denominator),
+    })
 }
 
 #[tauri::command(async)]
@@ -75,8 +84,14 @@ pub fn playlist_open(name: String) -> Result<ScreeningPlaylist, String> {
 }
 
 #[tauri::command(async)]
+// written in the current format whatever version the page's copy came from
 pub fn playlist_save(playlist: ScreeningPlaylist) -> Result<(), String> {
-    playlist.write(&playlist_path(&playlists_directory(), &playlist.name)?)
+    let path = playlist_path(&playlists_directory(), &playlist.name)?;
+    ScreeningPlaylist {
+        version: PLAYLIST_FORMAT_VERSION,
+        ..playlist
+    }
+    .write(&path)
 }
 
 #[tauri::command(async)]
@@ -90,7 +105,7 @@ pub fn playlist_plan(
         &playlist.rows,
         from_row,
         chrono::Local::now().naive_local(),
-        |directory, cpl_id| composition_seconds(&library, directory, cpl_id),
+        |directory, cpl_id| composition_length(&library, directory, cpl_id),
     )
 }
 

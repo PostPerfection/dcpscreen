@@ -83,7 +83,7 @@
             <ul id="playlist-warnings" class="playlist-warnings"></ul>
             <table class="jobs-table">
               <thead>
-                <tr><th>#</th><th>Row</th><th>Start Time</th><th>Expected</th><th></th></tr>
+                <tr><th>#</th><th>Row</th><th>In</th><th title="Playback stops before this frame">Out</th><th>Length</th><th>Start Time</th><th>Expected</th><th></th></tr>
               </thead>
               <tbody id="playlist-tbody"></tbody>
             </table>
@@ -239,6 +239,7 @@
                 <div class="prop-field">
                   <label for="set-player-sound-device">Sound Device</label>
                   <select id="set-player-sound-device"></select>
+                  <p id="set-player-sound-device-error" class="field-error" hidden></p>
                 </div>
                 <div class="prop-field">
                   <label for="set-player-sound-layout">Sound Layout</label>

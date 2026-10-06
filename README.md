@@ -46,7 +46,7 @@ Settings are kept in `~/.config/dcpscreen/settings.json`. The library (`library.
 
 ## Playlists
 
-A playlist runs compositions and intermissions in order. A composition that follows another composition plays straight on with no black frame between them. An intermission stops the picture and holds black or its still image for its length. A row with a start time waits on black until that local time when the row before ends earlier, and starts late, with a warning on the Playlist view, when the row before ends after it. The KDM for an encrypted composition is picked from the store when the row loads. Playing a composition from the library, Stop or closing the player window ends the playlist. The log lines start with `[playlist]`.
+A playlist runs compositions and intermissions in order. A composition row can play part of its composition, from its In timecode to the frame before its Out timecode. A composition that follows another composition plays straight on with no black frame between them. An intermission stops the picture and holds black or its still image for its length. A row with a start time waits on black until that local time when the row before ends earlier, and starts late, with a warning on the Playlist view, when the row before ends after it. The KDM for an encrypted composition is picked from the store when the row loads. Playing a composition from the library, Stop or closing the player window ends the playlist. The log lines start with `[playlist]`.
 
 ## Settings lock
 
