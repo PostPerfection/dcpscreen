@@ -24,6 +24,7 @@ const FIELDS = {
   subtitleColour: '#ffcc00',
   displayProfile: '/profiles/booth.icc',
   stereo: 'sideBySide',
+  decodeResolution: 'automatic',
 };
 
 const CONTROLS = playerControlsFromFields(FIELDS);
@@ -35,6 +36,7 @@ test('the form fields become the settings the backend reads', () => {
     playerSubtitles: { offsetPercent: 4, colour: null },
     playerDisplayProfile: '/profiles/booth.icc',
     playerStereo: 'sideBySide',
+    decodeResolution: 'automatic',
   });
   assert.equal(playerControlsFromFields({ ...FIELDS, displayProfile: '' }).playerDisplayProfile, null);
 });
@@ -117,7 +119,7 @@ function fakeField() {
 function fakeFields() {
   const names = ['displayProfile', 'brightness', 'maskTop', 'maskBottom', 'maskLeft', 'maskRight', 'scaling',
     'soundDevice', 'soundDeviceError', 'soundLayout', 'soundDelayMilliseconds', 'subtitleOffsetPercent',
-    'subtitleColourOverridden', 'subtitleColour', 'stereo'];
+    'subtitleColourOverridden', 'subtitleColour', 'stereo', 'decodeResolution'];
   return Object.fromEntries(names.map((name) => [name, fakeField()]));
 }
 
@@ -127,6 +129,7 @@ const SAVED = {
   playerSubtitles: { offsetPercent: 4, colour: '#ffcc00' },
   playerDisplayProfile: '/profiles/booth.icc',
   playerStereo: 'topAndBottom',
+  decodeResolution: 'half',
 };
 const makeOption = (value, text) => ({ value, text });
 
@@ -148,6 +151,7 @@ test('a sound device list that fails still fills every field and says why under 
   assert.equal(fields.subtitleColourOverridden.checked, true);
   assert.equal(fields.subtitleColour.value, '#ffcc00');
   assert.equal(fields.stereo.value, 'topAndBottom');
+  assert.equal(fields.decodeResolution.value, 'half');
   assert.equal(fields.soundDevice.value, 'HDMI 1');
   assert.deepEqual(fields.soundDevice.options.map((option) => option.value), ['', 'HDMI 1']);
   assert.equal(fields.soundDeviceError.hidden, false);

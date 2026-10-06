@@ -566,4 +566,23 @@ mod tests {
             guikit::preview::player_controls::StereoMode::LeftEye
         );
     }
+
+    #[test]
+    fn a_decode_resolution_change_is_refused_while_locked() {
+        let directory = tempfile::tempdir().unwrap();
+        let lock = locked_settings(&directory);
+
+        let error = lock
+            .save_settings(Settings {
+                decode_resolution: crate::settings::DecodeResolution::Quarter,
+                ..Default::default()
+            })
+            .unwrap_err();
+
+        assert_eq!(error, LOCKED_ERROR);
+        assert_eq!(
+            lock.load_settings().unwrap().settings.decode_resolution,
+            crate::settings::DecodeResolution::Automatic
+        );
+    }
 }

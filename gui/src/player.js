@@ -1,4 +1,5 @@
 import { convertFileSrc, invoke } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
 import { availableMonitors, getCurrentWindow } from "@tauri-apps/api/window";
 import {
   initFullPageSurface,
@@ -9,6 +10,7 @@ import {
 import { fullscreenMonitor } from "./player-monitor.js";
 import { holdCountdownText, playlistHudText } from "./screening-playlist.js";
 import { nextStereoMode, stereoHudText } from "./stereo-output.js";
+import { AUTOMATIC_RESOLUTION, decodeScaleHudText, nextPicker, startPicker, startingScale } from "./decode-scale-picker.js";
 
 const MAIN_WINDOW_LABEL = "main";
 const HUD_IDLE_TIMEOUT_MS = 3000;
@@ -32,6 +34,11 @@ const playlistRowCurrent = document.getElementById("player-row-current");
 const playlistRowNext = document.getElementById("player-row-next");
 const holdCountdown = document.getElementById("player-hold-countdown");
 const stereoButton = document.getElementById("player-stereo-btn");
+const decodeScaleLabel = document.getElementById("player-decode-scale");
+// the main page sends the Decode Resolution choice when Settings are saved
+const DECODE_RESOLUTION_EVENT = "decode-resolution-changed";
+// what the player decodes at before anything sets it
+const PLAYER_STARTING_SCALE = "full";
 let paused = false;
 // in page coordinates, null once a resize has moved the page under the pointer
 let lastPointer = null;
@@ -119,21 +126,69 @@ window.addEventListener("dblclick", (event) => {
   if (hud.contains(event.target)) return;
   toggleFullscreen().catch(reportFailure);
 });
-async function showStereoOutput(stereoscopic) {
-  const mode = stereoscopic ? await invoke("preview_stereo_output") : null;
-  const text = stereoHudText(stereoscopic, mode);
+// null for a mono source
+function showStereoOutput(stereoMode) {
+  const text = stereoHudText(stereoMode !== null, stereoMode);
   stereoButton.hidden = !text;
   stereoButton.textContent = text ?? "";
 }
 
 stereoButton.addEventListener("click", () =>
   invoke("preview_stereo_output")
-    .then((mode) => invoke("preview_set_stereo_output", { output: nextStereoMode(mode) }))
-    .then(() => showStereoOutput(true))
+    .then(async (mode) => {
+      const next = nextStereoMode(mode);
+      await invoke("preview_set_stereo_output", { output: next });
+      showStereoOutput(next);
+    })
     .catch(reportFailure));
 
+let decodeResolution = AUTOMATIC_RESOLUTION;
+let decodeScalePicker = startPicker(performance.now());
+let appliedDecodeScale = PLAYER_STARTING_SCALE;
+// a new source or another 3D output starts the picker again at full
+let pickedSource = null;
+let pickedStereoMode = null;
+
+async function applyDecodeScale(scale) {
+  const text = decodeScaleHudText(scale);
+  decodeScaleLabel.hidden = !text;
+  decodeScaleLabel.textContent = text ?? "";
+  if (scale === appliedDecodeScale) return;
+  appliedDecodeScale = scale;
+  await invoke("preview_set_decode_scale", { scale });
+}
+
+async function pickDecodeScale(meta, stereoMode) {
+  if (decodeResolution !== AUTOMATIC_RESOLUTION) return applyDecodeScale(decodeResolution);
+  const now = performance.now();
+  if (meta.source !== pickedSource || stereoMode !== pickedStereoMode) {
+    pickedSource = meta.source;
+    pickedStereoMode = stereoMode;
+    decodeScalePicker = startPicker(now);
+  }
+  decodeScalePicker = nextPicker(decodeScalePicker, meta, now);
+  await applyDecodeScale(decodeScalePicker.scale);
+}
+
+async function useDecodeResolution(resolution) {
+  decodeResolution = resolution;
+  decodeScalePicker = startPicker(performance.now());
+  await applyDecodeScale(startingScale(resolution));
+}
+
+async function followMetadata(meta) {
+  const stereoMode = meta.stereoscopic ? await invoke("preview_stereo_output") : null;
+  showStereoOutput(stereoMode);
+  await pickDecodeScale(meta, stereoMode);
+}
+
+listen(DECODE_RESOLUTION_EVENT, (event) => useDecodeResolution(event.payload).catch(reportFailure));
+invoke("load_settings")
+  .then((settings) => useDecodeResolution(settings.decodeResolution))
+  .catch(reportFailure);
+
 watchPreviewMetadata((meta) => {
-  showStereoOutput(Boolean(meta.stereoscopic)).catch(reportFailure);
+  followMetadata(meta).catch(reportFailure);
   const nowPaused = Boolean(meta.paused);
   if (nowPaused === paused) return;
   paused = nowPaused;

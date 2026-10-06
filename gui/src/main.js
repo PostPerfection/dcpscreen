@@ -1,5 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
-import { listen } from "@tauri-apps/api/event";
+import { emitTo, listen } from "@tauri-apps/api/event";
 import { Window, availableMonitors, currentMonitor } from "@tauri-apps/api/window";
 import { open, message } from "@tauri-apps/plugin-dialog";
 import { enablePreviewTransport, initPreview, previewFile, stopPreview, watchPreviewMetadata } from "../../extern/guikit/src/preview.js";
@@ -71,6 +71,8 @@ const NOT_PLAYED_TITLE = "Not played";
 const PLAYBACK_STOPPED_TITLE = "Playback stopped";
 // the backend stopped an encrypted composition the output no longer protects
 const HDCP_STOPPED_EVENT = "hdcp-stopped";
+// the player page owns the decode scale, Save tells it the new choice
+const DECODE_RESOLUTION_EVENT = "decode-resolution-changed";
 const SETTINGS_SAVED_STATUS = "Settings saved";
 const GPU_UNAVAILABLE_STATUS = "GPU decoding unavailable";
 const LIBRARY_POLL_INTERVAL_MS = 3000;
@@ -109,6 +111,7 @@ const playerFields = {
   subtitleColour: document.getElementById("set-player-subtitle-colour"),
   displayProfile: document.getElementById("set-player-display-profile"),
   stereo: document.getElementById("set-player-stereo"),
+  decodeResolution: document.getElementById("set-decode-resolution"),
   colordProfiles: document.getElementById("set-player-display-profile-colord"),
   displayProfileError: document.getElementById("set-player-display-profile-error"),
 };
@@ -532,6 +535,7 @@ function playerControlsFromForm() {
     subtitleColour: playerFields.subtitleColour.value,
     displayProfile: playerFields.displayProfile.value,
     stereo: playerFields.stereo.value,
+    decodeResolution: playerFields.decodeResolution.value,
   });
 }
 
@@ -633,6 +637,7 @@ document.getElementById("settings-form").addEventListener("submit", (event) => {
     const gpuFailure = await applyGpuSetting(settings);
     await invoke("save_settings", { settings: gpuFailure ? { ...settings, gpu: false } : settings });
     await applyPlayerControls(settings);
+    await emitTo(PLAYER_WINDOW_LABEL, DECODE_RESOLUTION_EVENT, settings.decodeResolution);
     setStatus(SETTINGS_SAVED_STATUS);
     await refreshLibraryFromDisk();
     if (gpuFailure) reportGpuFailure(gpuFailure);

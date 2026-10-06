@@ -27,6 +27,7 @@ pub struct Settings {
     pub player_sound: SoundControls,
     pub player_subtitles: SubtitleControls,
     pub player_stereo: StereoMode,
+    pub decode_resolution: DecodeResolution,
     // a monitor ICC profile for DCP pictures, None is the built-in sRGB
     pub player_display_profile: Option<PathBuf>,
     // encrypted content plays only on an output whose HDCP reads Enabled
@@ -50,6 +51,17 @@ impl Settings {
             .map(postkit::kdm_store::recipient_subject_name)
             .transpose()
     }
+}
+
+// automatic lets the player page step the decode scale to keep the frame rate
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum DecodeResolution {
+    #[default]
+    Automatic,
+    Full,
+    Half,
+    Quarter,
 }
 
 // the page never sees this, it gets and sends Settings only
@@ -149,6 +161,7 @@ mod tests {
                 colour: Some("#ffcc00".to_string()),
             },
             player_stereo: StereoMode::SideBySide,
+            decode_resolution: DecodeResolution::Half,
             player_display_profile: Some(PathBuf::from("/usr/share/color/icc/booth.icc")),
             require_hdcp: true,
         };
@@ -191,6 +204,7 @@ mod tests {
         );
         assert_eq!(json["requireHdcp"], serde_json::json!(true));
         assert_eq!(json["playerStereo"], serde_json::json!("sideBySide"));
+        assert_eq!(json["decodeResolution"], serde_json::json!("half"));
         assert_eq!(
             json["playerDisplayProfile"],
             serde_json::json!("/usr/share/color/icc/booth.icc")
@@ -230,6 +244,7 @@ mod tests {
         assert_eq!(settings.player_display_profile, None);
         assert!(!settings.require_hdcp);
         assert_eq!(settings.player_stereo, StereoMode::LeftEye);
+        assert_eq!(settings.decode_resolution, DecodeResolution::Automatic);
     }
 
     #[test]
