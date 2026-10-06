@@ -40,6 +40,7 @@ mod keys;
 mod library;
 mod play;
 mod settings;
+mod settings_lock;
 #[cfg(test)]
 mod test_fixtures;
 mod verify_jobs;
@@ -73,6 +74,7 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .manage(job_queue)
         .manage(library)
+        .manage(settings_lock::SettingsLock::new(settings::settings_path()))
         .invoke_handler(tauri::generate_handler![
             guikit::preview::preview_load,
             guikit::preview::preview_play_pause,
@@ -101,6 +103,11 @@ pub fn run() {
             guikit::gpu::set_gpu,
             settings::load_settings,
             settings::save_settings,
+            settings_lock::settings_lock_set,
+            settings_lock::settings_lock_change,
+            settings_lock::settings_lock_remove,
+            settings_lock::settings_unlock,
+            settings_lock::settings_lock,
             library::library_list,
             library::library_refresh,
             library::library_verify,

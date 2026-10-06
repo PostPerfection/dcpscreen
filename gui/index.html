@@ -100,12 +100,24 @@
         </div>
 
         <!-- SETTINGS VIEW -->
-        <div class="view" id="view-settings">
+        <div class="view" id="view-settings" data-settings-lock="locked">
           <section class="panel">
             <div class="panel-header">
               <h2>Settings</h2>
             </div>
-            <form id="settings-form" class="settings-grid">
+            <form id="settings-unlock-form" class="settings-grid shown-when-locked">
+              <fieldset>
+                <legend>Settings are locked</legend>
+                <div class="prop-field">
+                  <label for="settings-unlock-password">Password</label>
+                  <input type="password" id="settings-unlock-password" autocomplete="current-password">
+                </div>
+              </fieldset>
+              <div class="form-actions">
+                <button type="submit" class="btn-primary">Unlock</button>
+              </div>
+            </form>
+            <form id="settings-form" class="settings-grid hidden-when-locked">
               <fieldset>
                 <legend>Library</legend>
                 <div class="prop-field">
@@ -206,6 +218,29 @@
               </fieldset>
               <div class="form-actions">
                 <button type="submit" class="btn-primary">Save</button>
+              </div>
+            </form>
+            <form id="settings-password-form" class="settings-grid hidden-when-locked">
+              <fieldset>
+                <legend>Lock settings with a password</legend>
+                <div class="prop-field shown-with-password">
+                  <label for="settings-current-password">Current Password</label>
+                  <input type="password" id="settings-current-password" autocomplete="current-password">
+                </div>
+                <div class="prop-field">
+                  <label for="settings-new-password">New Password</label>
+                  <input type="password" id="settings-new-password" autocomplete="new-password">
+                </div>
+                <div class="prop-field">
+                  <label for="settings-new-password-confirmation">Repeat New Password</label>
+                  <input type="password" id="settings-new-password-confirmation" autocomplete="new-password">
+                </div>
+              </fieldset>
+              <div class="form-actions">
+                <button type="button" id="settings-password-set" class="btn-sm shown-without-password">Set Password</button>
+                <button type="button" id="settings-password-change" class="btn-sm shown-with-password">Change Password</button>
+                <button type="button" id="settings-password-remove" class="btn-sm shown-with-password">Remove Password</button>
+                <button type="button" id="settings-lock" class="btn-primary shown-with-password">Lock</button>
               </div>
             </form>
           </section>

@@ -43,3 +43,9 @@ Play opens the player as a normal window. Full screen goes to the display named 
 grok looks for `libgrokj2k_plugin` in the directory `GRK_PLUGIN_PATH` names, then in the working directory, then in the executable's own directory, and never on `LD_LIBRARY_PATH`. Without the plugin the player decodes on the CPU. `GRK_NO_PLUGIN=1` keeps grok on the CPU even when the plugin is found.
 
 Settings are kept in `~/.config/dcpscreen/settings.json`. The library (`library.json`), the KDM store (`kdms/`) and the verify jobs (`jobs.jsonl`) are kept in `~/.local/share/dcpscreen`. `XDG_CONFIG_HOME` and `XDG_DATA_HOME` move them, and `DCPSCREEN_JOBS_FILE` names a jobs file of its own. The library is refreshed from the folders in Settings at startup and prints what it found as `[library] refresh: ...` on stdout.
+
+## Settings lock
+
+Settings has "Lock settings with a password", with a minimum of 8 characters. While a password is set and the session is locked, saving settings, adding or removing a KDM and removing a package from the library are refused, while playing, verifying and browsing stay open. The lock keeps projectionists from changing settings in the app. It does not protect against anyone who can edit the user's files.
+
+The password is stored as an Argon2id hash under `settingsPasswordHash` in `settings.json`. To remove a forgotten password, quit DCP Screen and delete that entry from the file, with the comma that ends the line above it.

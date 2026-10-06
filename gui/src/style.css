@@ -26,3 +26,12 @@
   text-align: right;
   font-size: 12px;
 }
+#view-settings:not([data-settings-lock="locked"]) .shown-when-locked,
+#view-settings[data-settings-lock="locked"] .hidden-when-locked,
+#view-settings:not([data-settings-lock="noPassword"]) .shown-without-password,
+#view-settings[data-settings-lock="noPassword"] .shown-with-password {
+  display: none;
+}
+#settings-password-form {
+  margin-top: 16px;
+}

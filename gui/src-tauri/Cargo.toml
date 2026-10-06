@@ -25,6 +25,7 @@ postkit = { path = "../../extern/postkit" }
 guikit = { path = "../../extern/guikit/rust" }
 guikit-startup = { path = "../../extern/guikit/startup" }
 dcpdoctor-core = { path = "../../extern/dcpdoctor/rust/crates/dcpdoctor-core" }
+argon2 = "0.6.0"
 
 [dev-dependencies]
 tempfile = "3"

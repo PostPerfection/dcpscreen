@@ -29,6 +29,11 @@ const DEFAULT_SOUND_DEVICE_TEXT = "Default";
 const READY_STATUS = "Ready";
 const BRIGHTNESS_DECIMALS = 2;
 const DEFAULT_SUBTITLE_COLOUR = "#ffffff";
+const SETTINGS_LOCKED = "locked";
+const SETTINGS_UNLOCKED_STATUS = "Settings unlocked";
+const SETTINGS_LOCKED_STATUS = "Settings locked";
+const PASSWORD_CHANGED_STATUS = "Settings password changed";
+const PASSWORD_REMOVED_STATUS = "Settings password removed";
 
 const certificateInput = document.getElementById("set-recipient-certificate");
 const privateKeyInput = document.getElementById("set-recipient-key");
@@ -48,6 +53,13 @@ const playerFields = {
   subtitleOffsetPercent: document.getElementById("set-player-subtitle-offset"),
   subtitleColourOverridden: document.getElementById("set-player-subtitle-colour-overridden"),
   subtitleColour: document.getElementById("set-player-subtitle-colour"),
+};
+const settingsView = document.getElementById("view-settings");
+const passwordFields = {
+  unlock: document.getElementById("settings-unlock-password"),
+  current: document.getElementById("settings-current-password"),
+  new: document.getElementById("settings-new-password"),
+  confirmation: document.getElementById("settings-new-password-confirmation"),
 };
 const playerWindow = await Window.getByLabel(PLAYER_WINDOW_LABEL);
 let libraryRoots = [];
@@ -276,6 +288,7 @@ function showPlayerWarnings(metadata) {
 
 async function showSettings() {
   const settings = await invoke("load_settings");
+  settingsView.dataset.settingsLock = settings.settingsLock;
   libraryRoots = settings.libraryRoots;
   certificateInput.value = settings.recipientCertificate ?? "";
   privateKeyInput.value = settings.recipientKey ?? "";
@@ -296,6 +309,7 @@ async function applySavedSettings() {
   const gpuFailure = await applyGpuSetting(settings);
   if (!gpuFailure) return;
   reportGpuFailure(gpuFailure);
+  if (settings.settingsLock === SETTINGS_LOCKED) return;
   await invoke("save_settings", { settings: { ...settings, gpu: false } });
 }
 
@@ -333,6 +347,41 @@ document.getElementById("settings-form").addEventListener("submit", (event) => {
     if (gpuFailure) reportGpuFailure(gpuFailure);
   })();
 });
+
+async function runPasswordCommand(command, args, doneStatus) {
+  await invoke(command, args);
+  Object.values(passwordFields).forEach((field) => {
+    field.value = "";
+  });
+  await showSettings();
+  setStatus(doneStatus);
+}
+
+document.getElementById("settings-unlock-form").addEventListener("submit", (event) => {
+  event.preventDefault();
+  reportingErrors(() =>
+    runPasswordCommand("settings_unlock", { password: passwordFields.unlock.value }, SETTINGS_UNLOCKED_STATUS))();
+});
+document.getElementById("settings-password-set").addEventListener("click", reportingErrors(() =>
+  runPasswordCommand(
+    "settings_lock_set",
+    { password: passwordFields.new.value, confirmation: passwordFields.confirmation.value },
+    SETTINGS_LOCKED_STATUS,
+  )));
+document.getElementById("settings-password-change").addEventListener("click", reportingErrors(() =>
+  runPasswordCommand(
+    "settings_lock_change",
+    {
+      currentPassword: passwordFields.current.value,
+      password: passwordFields.new.value,
+      confirmation: passwordFields.confirmation.value,
+    },
+    PASSWORD_CHANGED_STATUS,
+  )));
+document.getElementById("settings-password-remove").addEventListener("click", reportingErrors(() =>
+  runPasswordCommand("settings_lock_remove", { currentPassword: passwordFields.current.value }, PASSWORD_REMOVED_STATUS)));
+document.getElementById("settings-lock").addEventListener("click", reportingErrors(() =>
+  runPasswordCommand("settings_lock", {}, SETTINGS_LOCKED_STATUS)));
 
 playerFields.brightness.addEventListener("input", showBrightness);
 playerFields.subtitleColourOverridden.addEventListener("change", enableSubtitleColour);

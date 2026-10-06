@@ -1,3 +1,4 @@
+use crate::settings_lock::{LockState, SettingsLock};
 use guikit::preview::player_controls::{PictureControls, SoundControls, SubtitleControls};
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
@@ -26,19 +27,7 @@ pub struct Settings {
 
 impl Settings {
     pub fn load(path: &Path) -> Result<Settings, String> {
-        let text = postkit::preferences::read_preferences_file(path)
-            .map_err(|error| format!("{}: {error}", path.display()))?;
-        let Some(text) = text else {
-            return Ok(Settings::default());
-        };
-        serde_json::from_str(&text).map_err(|error| format!("{}: {error}", path.display()))
-    }
-
-    pub fn save(&self, path: &Path) -> Result<(), String> {
-        self.recipient_subject_name()?;
-        let json = serde_json::to_string_pretty(self).map_err(|error| error.to_string())?;
-        postkit::preferences::write_preferences_file(path, &json)
-            .map_err(|error| format!("{}: {error}", path.display()))
+        Ok(SettingsFile::load(path)?.settings)
     }
 
     pub fn recipient_subject_name(&self) -> Result<Option<String>, String> {
@@ -49,14 +38,52 @@ impl Settings {
     }
 }
 
-#[tauri::command(async)]
-pub fn load_settings() -> Result<Settings, String> {
-    Settings::load(&settings_path())
+// the page never sees this, it gets and sends Settings only
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SettingsFile {
+    #[serde(flatten)]
+    pub settings: Settings,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub settings_password_hash: Option<String>,
+}
+
+impl SettingsFile {
+    pub fn load(path: &Path) -> Result<SettingsFile, String> {
+        let text = postkit::preferences::read_preferences_file(path)
+            .map_err(|error| format!("{}: {error}", path.display()))?;
+        let Some(text) = text else {
+            return Ok(SettingsFile::default());
+        };
+        serde_json::from_str(&text).map_err(|error| format!("{}: {error}", path.display()))
+    }
+
+    pub fn save(&self, path: &Path) -> Result<(), String> {
+        let json = serde_json::to_string_pretty(self).map_err(|error| error.to_string())?;
+        postkit::preferences::write_preferences_file(path, &json)
+            .map_err(|error| format!("{}: {error}", path.display()))
+    }
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LoadedSettings {
+    #[serde(flatten)]
+    pub settings: Settings,
+    pub settings_lock: LockState,
 }
 
 #[tauri::command(async)]
-pub fn save_settings(settings: Settings) -> Result<(), String> {
-    settings.save(&settings_path())
+pub fn load_settings(lock: tauri::State<'_, SettingsLock>) -> Result<LoadedSettings, String> {
+    lock.load_settings()
+}
+
+#[tauri::command(async)]
+pub fn save_settings(
+    settings: Settings,
+    lock: tauri::State<'_, SettingsLock>,
+) -> Result<(), String> {
+    lock.save_settings(settings)
 }
 
 #[cfg(test)]
@@ -99,7 +126,12 @@ mod tests {
             },
         };
 
-        settings.save(&path).unwrap();
+        SettingsFile {
+            settings: settings.clone(),
+            ..Default::default()
+        }
+        .save(&path)
+        .unwrap();
 
         assert_eq!(Settings::load(&path).unwrap(), settings);
         let json: serde_json::Value =
@@ -191,7 +223,9 @@ mod tests {
             ..Default::default()
         };
 
-        let error = settings.save(&path).unwrap_err();
+        let error = SettingsLock::new(path.clone())
+            .save_settings(settings)
+            .unwrap_err();
 
         assert!(
             error.starts_with(&format!(

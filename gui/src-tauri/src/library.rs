@@ -1,4 +1,5 @@
 use crate::settings::{settings_path, Settings};
+use crate::settings_lock::SettingsLock;
 use crate::verify_jobs::{JobQueue, VerifyJob, VerifyWorker};
 use postkit::package_library::{
     refresh, CompositionEntry, Library, LibraryEntry, RefreshReport, Standard, Verdict,
@@ -178,7 +179,9 @@ pub fn library_verify(
 pub fn library_remove(
     directory: PathBuf,
     library: tauri::State<'_, LibraryState>,
+    lock: tauri::State<'_, SettingsLock>,
 ) -> Result<(), String> {
+    lock.refuse_while_locked()?;
     let mut entries = library.lock();
     entries.remove(&directory);
     entries.save()

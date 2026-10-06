@@ -1,4 +1,5 @@
 use crate::settings::{settings_path, Settings};
+use crate::settings_lock::SettingsLock;
 use postkit::kdm_store::{fit, KdmFit, KdmStore, StoredKdm};
 use serde::Serialize;
 use std::path::{Path, PathBuf};
@@ -79,13 +80,15 @@ pub fn keys_list() -> Result<KeysListing, String> {
 }
 
 #[tauri::command(async)]
-pub fn keys_ingest(path: PathBuf) -> Result<(), String> {
+pub fn keys_ingest(path: PathBuf, lock: tauri::State<'_, SettingsLock>) -> Result<(), String> {
+    lock.refuse_while_locked()?;
     load_store(&kdm_store_directory()).ingest(&path)?;
     Ok(())
 }
 
 #[tauri::command(async)]
-pub fn keys_remove(path: PathBuf) -> Result<(), String> {
+pub fn keys_remove(path: PathBuf, lock: tauri::State<'_, SettingsLock>) -> Result<(), String> {
+    lock.refuse_while_locked()?;
     load_store(&kdm_store_directory()).remove(&path)
 }
 
