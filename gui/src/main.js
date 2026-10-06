@@ -182,7 +182,7 @@ async function playComposition(libraryPackage, composition) {
   }
   await invoke("playlist_stop");
   await showPlayerWindow();
-  await previewFile(source.cplPath, source.contentKeys);
+  await previewFile(source.cplPath, source.contentKeys, source.otherPackages);
 }
 
 const playlistFields = {

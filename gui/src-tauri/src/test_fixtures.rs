@@ -17,6 +17,7 @@ const TEXT_XML_TYPE: &str = "text/xml";
 
 pub const FEATURE_ID: &str = "11111111-0000-0000-0000-000000000000";
 pub const TRAILER_ID: &str = "22222222-0000-0000-0000-000000000000";
+pub const ORIGINAL_VERSION_ID: &str = "33333333-0000-0000-0000-000000000000";
 
 pub struct TestComposition {
     pub id: &'static str,
@@ -42,6 +43,17 @@ pub const TRAILER: TestComposition = TestComposition {
     encrypted: true,
 };
 
+pub const ORIGINAL_VERSION: TestComposition = TestComposition {
+    id: ORIGINAL_VERSION_ID,
+    title: "Feature & Credits OV",
+    ..FEATURE
+};
+
+// the same in every composition, so an original version holds the reels its version file lacks
+pub fn picture_id(reel: usize) -> String {
+    format!("bbbbbbbb-0000-0000-0000-00000000000{reel}")
+}
+
 pub fn uuid(text: &str) -> uuid::Uuid {
     uuid::Uuid::parse_str(text).unwrap()
 }
@@ -51,6 +63,15 @@ pub fn cpl_file_name(id: &str) -> String {
 }
 
 pub fn write_package(directory: &Path, compositions: &[TestComposition]) {
+    write_package_holding(directory, compositions, |_reel| true);
+}
+
+// the asset map lists the picture of each reel holds_reel takes, a version file holds only some
+pub fn write_package_holding(
+    directory: &Path,
+    compositions: &[TestComposition],
+    holds_reel: fn(usize) -> bool,
+) {
     std::fs::create_dir_all(directory).unwrap();
     let packing_list_file = format!("PKL_{PACKING_LIST_ID}.xml");
     let mut assets = vec![AssetMapAsset {
@@ -66,7 +87,7 @@ pub fn write_package(directory: &Path, compositions: &[TestComposition]) {
             .enumerate()
             .map(|(index, &duration)| DcpCplReel {
                 reel_id: format!("aaaaaaaa-0000-0000-0000-00000000000{index}"),
-                picture_id: format!("bbbbbbbb-0000-0000-0000-00000000000{index}"),
+                picture_id: picture_id(index),
                 picture_edit_rate_num: composition.frames_per_second,
                 picture_edit_rate_den: 1,
                 picture_duration: duration,
@@ -84,6 +105,18 @@ pub fn write_package(directory: &Path, compositions: &[TestComposition]) {
             ..Default::default()
         };
         std::fs::write(directory.join(cpl_file_name(composition.id)), cpl.to_xml()).unwrap();
+        let held_reels = (0..composition.reel_durations.len()).filter(|&reel| holds_reel(reel));
+        for reel in held_reels {
+            let id = picture_id(reel);
+            if assets.iter().any(|asset| asset.id == id) {
+                continue;
+            }
+            assets.push(AssetMapAsset {
+                path: format!("picture_{reel}.mxf"),
+                id,
+                packing_list: false,
+            });
+        }
         assets.push(AssetMapAsset {
             id: composition.id.into(),
             path: cpl_file_name(composition.id),

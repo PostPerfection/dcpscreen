@@ -2,6 +2,7 @@ use crate::keys::{kdm_store_directory, load_store};
 use crate::library::LibraryState;
 use crate::settings::{settings_path, Settings};
 use guikit::preview::screening_runner::RowSource;
+use postkit::composition_timeline::find_original_version_packages;
 use postkit::content_keys::ContentKeys;
 use postkit::kdm_store::{KdmFit, KdmStore};
 use postkit::package_library::Library;
@@ -36,6 +37,8 @@ pub enum PlaySource {
     Ready {
         cpl_path: PathBuf,
         content_keys: Option<ContentKeyPaths>,
+        // the library packages a version file takes its original version's assets from
+        other_packages: Vec<PathBuf>,
     },
     NoKdmFits {
         kdms: Vec<RefusedKdm>,
@@ -65,10 +68,17 @@ pub fn play_source(
             directory.display()
         )
     })?;
+    let library_packages: Vec<PathBuf> = library
+        .entries()
+        .iter()
+        .map(|entry| entry.package.directory.clone())
+        .collect();
+    let other_packages = find_original_version_packages(&cpl_path, &library_packages)?;
     if !composition.encrypted {
         return Ok(PlaySource::Ready {
             cpl_path,
             content_keys: None,
+            other_packages,
         });
     }
     let recipient_key = settings
@@ -84,6 +94,7 @@ pub fn play_source(
                 recipient_key,
                 keys: None,
             }),
+            other_packages,
         });
     }
     let kdms = store
@@ -131,10 +142,15 @@ pub fn row_source(
     directory: &Path,
     cpl_id: uuid::Uuid,
 ) -> Result<RowSource, String> {
-    match play_source_now(library, directory, cpl_id)? {
+    row_source_from(play_source_now(library, directory, cpl_id)?)
+}
+
+fn row_source_from(source: PlaySource) -> Result<RowSource, String> {
+    match source {
         PlaySource::Ready {
             cpl_path,
             content_keys,
+            other_packages,
         } => {
             let keys = match content_keys {
                 Some(paths) => ContentKeys::from_options(
@@ -144,7 +160,11 @@ pub fn row_source(
                 )?,
                 None => None,
             };
-            Ok(RowSource { cpl_path, keys })
+            Ok(RowSource {
+                cpl_path,
+                keys,
+                other_packages,
+            })
         }
         PlaySource::NoKdmFits { .. } => Err(NO_KDM_FITS_MESSAGE.to_string()),
     }
@@ -154,11 +174,15 @@ pub fn row_source(
 mod tests {
     use super::*;
     use crate::test_fixtures::{
-        cpl_file_name, other_recipient_chain, recipient_chain, uuid, write_kdm, write_package,
-        KdmWindow, FEATURE, FEATURE_ID, TRAILER, TRAILER_ID,
+        cpl_file_name, other_recipient_chain, picture_id, recipient_chain, uuid, write_kdm,
+        write_package, write_package_holding, KdmWindow, FEATURE, FEATURE_ID, ORIGINAL_VERSION,
+        TRAILER, TRAILER_ID,
     };
     use chrono::{DateTime, Duration, SubsecRound, Utc};
+    use guikit::preview::screening_runner::{PlayerStatus, RunnerPlayer, ScreeningRun};
+    use postkit::screening_playlist::{PlaylistRow, RowItem, ScreeningPlaylist};
     use serde_json::json;
+    use std::cell::RefCell;
 
     const DAYS_UNTIL_NOW: i64 = 6;
     const EXPIRED_FILE: &str = "a_expired.xml";
@@ -251,6 +275,7 @@ mod tests {
                 "kind": "ready",
                 "cplPath": fixture.package.join(cpl_file_name(FEATURE_ID)).display().to_string(),
                 "contentKeys": null,
+                "otherPackages": [],
             })
         );
     }
@@ -271,6 +296,7 @@ mod tests {
                     "recipient_key": recipient_chain().key.display().to_string(),
                     "keys": null,
                 },
+                "otherPackages": [],
             })
         );
     }
@@ -344,6 +370,145 @@ mod tests {
         assert_eq!(
             source,
             Err(format!("{} is not in the library", elsewhere.display()))
+        );
+    }
+
+    // reel 2 of the version file is only in the original version
+    const ORIGINAL_VERSION_REEL: usize = 1;
+    // the feature is not encrypted, so it plays with an empty store
+    const ABSENT_KDM_DIRECTORY: &str = "no kdms";
+
+    struct VersionFileLibrary {
+        _root: tempfile::TempDir,
+        version_file: PathBuf,
+        original_version: PathBuf,
+        library: Library,
+    }
+
+    fn version_file_library(with_original_version: bool) -> VersionFileLibrary {
+        let root = tempfile::tempdir().unwrap();
+        let library_root = root.path().join("library");
+        let version_file = library_root.join("feature_vf");
+        let original_version = library_root.join("feature_ov");
+        write_package_holding(&version_file, &[FEATURE], |reel| {
+            reel != ORIGINAL_VERSION_REEL
+        });
+        if with_original_version {
+            write_package(&original_version, &[ORIGINAL_VERSION]);
+        }
+        let mut library = Library::load(&root.path().join("library.json")).unwrap();
+        postkit::package_library::refresh(&mut library, &[library_root]);
+        VersionFileLibrary {
+            _root: root,
+            version_file,
+            original_version,
+            library,
+        }
+    }
+
+    fn play_from(library: &Library, directory: &Path) -> Result<PlaySource, String> {
+        play_source(
+            library,
+            &load_store(&directory.join(ABSENT_KDM_DIRECTORY)),
+            &Settings::default(),
+            directory,
+            uuid(FEATURE_ID),
+            chrono::Utc::now(),
+        )
+    }
+
+    #[test]
+    fn a_version_file_plays_with_the_library_package_holding_its_original_version() {
+        let fixture = version_file_library(true);
+
+        let source = play_from(&fixture.library, &fixture.version_file).unwrap();
+
+        assert_eq!(
+            source,
+            PlaySource::Ready {
+                cpl_path: fixture.version_file.join(cpl_file_name(FEATURE_ID)),
+                content_keys: None,
+                other_packages: vec![fixture.original_version.clone()],
+            }
+        );
+    }
+
+    #[test]
+    fn a_version_file_whose_original_version_is_not_in_the_library_names_the_missing_reel() {
+        let fixture = version_file_library(false);
+
+        let error = play_from(&fixture.library, &fixture.version_file).unwrap_err();
+
+        assert_eq!(
+            error,
+            format!(
+                "no package in the library holds {}",
+                picture_id(ORIGINAL_VERSION_REEL)
+            )
+        );
+    }
+
+    #[derive(Default)]
+    struct RecordingPlayer {
+        loads: RefCell<Vec<(PathBuf, Vec<PathBuf>)>>,
+        status: RefCell<PlayerStatus>,
+    }
+
+    impl RunnerPlayer for RecordingPlayer {
+        fn load(&self, source: RowSource) -> Result<(), String> {
+            self.status.borrow_mut().source = Some(source.cpl_path.display().to_string());
+            self.loads
+                .borrow_mut()
+                .push((source.cpl_path, source.other_packages));
+            Ok(())
+        }
+
+        fn queue_next(&self, source: RowSource) -> Result<(), String> {
+            Err(format!(
+                "{} queued with no row after it",
+                source.cpl_path.display()
+            ))
+        }
+
+        fn stop(&self) -> Result<(), String> {
+            Ok(())
+        }
+
+        fn status(&self) -> Result<PlayerStatus, String> {
+            Ok(self.status.borrow().clone())
+        }
+    }
+
+    #[test]
+    fn a_playlist_row_of_a_version_file_loads_with_its_original_version() {
+        let fixture = version_file_library(true);
+        let mut playlist = ScreeningPlaylist::new("Evening");
+        playlist.rows = vec![PlaylistRow {
+            start_time: None,
+            item: RowItem::Composition {
+                package_directory: fixture.version_file.clone(),
+                cpl_id: uuid(FEATURE_ID),
+                title: FEATURE.title.to_string(),
+            },
+        }];
+        let library = fixture.library.clone();
+        let player = RecordingPlayer::default();
+
+        let run = ScreeningRun::start(
+            playlist,
+            0,
+            Box::new(move |directory, _cpl_id| row_source_from(play_from(&library, directory)?)),
+            &player,
+            chrono::Local::now().naive_local(),
+        );
+
+        assert!(run.is_running());
+        assert_eq!(
+            player.loads.take(),
+            [(
+                fixture.version_file.join(cpl_file_name(FEATURE_ID)),
+                vec![fixture.original_version.clone()]
+            )]
         );
     }
 }
