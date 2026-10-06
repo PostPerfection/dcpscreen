@@ -71,8 +71,8 @@ const NOT_PLAYED_TITLE = "Not played";
 const PLAYBACK_STOPPED_TITLE = "Playback stopped";
 // the backend stopped an encrypted composition the output no longer protects
 const HDCP_STOPPED_EVENT = "hdcp-stopped";
-// the player page owns the decode scale, Save tells it the new choice
-const DECODE_RESOLUTION_EVENT = "decode-resolution-changed";
+// the player page owns the decode scale, it hears the choice again once the GPU setting is applied
+const CPU_DECODE_RESOLUTION_EVENT = "cpu-decode-resolution-changed";
 const SETTINGS_SAVED_STATUS = "Settings saved";
 const GPU_UNAVAILABLE_STATUS = "GPU decoding unavailable";
 const LIBRARY_POLL_INTERVAL_MS = 3000;
@@ -111,7 +111,7 @@ const playerFields = {
   subtitleColour: document.getElementById("set-player-subtitle-colour"),
   displayProfile: document.getElementById("set-player-display-profile"),
   stereo: document.getElementById("set-player-stereo"),
-  decodeResolution: document.getElementById("set-decode-resolution"),
+  cpuDecodeResolution: document.getElementById("set-cpu-decode-resolution"),
   colordProfiles: document.getElementById("set-player-display-profile-colord"),
   displayProfileError: document.getElementById("set-player-display-profile-error"),
 };
@@ -535,7 +535,7 @@ function playerControlsFromForm() {
     subtitleColour: playerFields.subtitleColour.value,
     displayProfile: playerFields.displayProfile.value,
     stereo: playerFields.stereo.value,
-    decodeResolution: playerFields.decodeResolution.value,
+    cpuDecodeResolution: playerFields.cpuDecodeResolution.value,
   });
 }
 
@@ -600,6 +600,7 @@ async function applySavedSettings() {
   const settings = await showSettings();
   await applyPlayerControls(settings);
   const gpuFailure = await applyGpuSetting(settings);
+  await emitTo(PLAYER_WINDOW_LABEL, CPU_DECODE_RESOLUTION_EVENT, settings.cpuDecodeResolution);
   if (!gpuFailure) return;
   reportGpuFailure(gpuFailure);
   if (settings.settingsLock === SETTINGS_LOCKED) return;
@@ -637,7 +638,7 @@ document.getElementById("settings-form").addEventListener("submit", (event) => {
     const gpuFailure = await applyGpuSetting(settings);
     await invoke("save_settings", { settings: gpuFailure ? { ...settings, gpu: false } : settings });
     await applyPlayerControls(settings);
-    await emitTo(PLAYER_WINDOW_LABEL, DECODE_RESOLUTION_EVENT, settings.decodeResolution);
+    await emitTo(PLAYER_WINDOW_LABEL, CPU_DECODE_RESOLUTION_EVENT, settings.cpuDecodeResolution);
     setStatus(SETTINGS_SAVED_STATUS);
     await refreshLibraryFromDisk();
     if (gpuFailure) reportGpuFailure(gpuFailure);

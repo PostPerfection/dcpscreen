@@ -13,9 +13,10 @@ const SETTLE_MS = 2000;
 // a scale too slow to time its first decodes still gets judged
 const SETTLE_CEILING_MS = 5000;
 
-// the scale a fixed Settings choice decodes at, or full where the picker starts
-export function startingScale(resolution) {
-  return resolution === AUTOMATIC_RESOLUTION ? FULL_SCALE : resolution;
+// the device decodes full resolution only, the Settings choice is for the cpu
+export function startingScale(cpuResolution, gpuActive) {
+  if (gpuActive || cpuResolution === AUTOMATIC_RESOLUTION) return FULL_SCALE;
+  return cpuResolution;
 }
 
 // a load or an output mode change starts again at full, the only way back up
@@ -42,7 +43,9 @@ function settling(state, sample, now) {
 }
 
 // the picker after one metadata sample, its scale is what the player should decode at
-export function nextPicker(state, sample, now) {
+export function nextPicker(state, sample, now, cpuResolution, gpuActive) {
+  const picking = !gpuActive && cpuResolution === AUTOMATIC_RESOLUTION;
+  if (!picking) return { ...startPicker(now), scale: startingScale(cpuResolution, gpuActive) };
   const dropped = sample.dropped_frames_not_decoded ?? 0;
   const unsettled = settling(state, sample, now);
   const newDrop = !unsettled && state.droppedNotDecoded !== null && dropped > state.droppedNotDecoded;

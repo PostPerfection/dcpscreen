@@ -27,7 +27,8 @@ pub struct Settings {
     pub player_sound: SoundControls,
     pub player_subtitles: SubtitleControls,
     pub player_stereo: StereoMode,
-    pub decode_resolution: DecodeResolution,
+    #[serde(alias = "decodeResolution")]
+    pub cpu_decode_resolution: DecodeResolution,
     // a monitor ICC profile for DCP pictures, None is the built-in sRGB
     pub player_display_profile: Option<PathBuf>,
     // encrypted content plays only on an output whose HDCP reads Enabled
@@ -53,7 +54,7 @@ impl Settings {
     }
 }
 
-// automatic lets the player page step the decode scale to keep the frame rate
+// the scale the cpu decodes at, automatic lets the player page step it down to keep the frame rate
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub enum DecodeResolution {
@@ -161,7 +162,7 @@ mod tests {
                 colour: Some("#ffcc00".to_string()),
             },
             player_stereo: StereoMode::SideBySide,
-            decode_resolution: DecodeResolution::Half,
+            cpu_decode_resolution: DecodeResolution::Half,
             player_display_profile: Some(PathBuf::from("/usr/share/color/icc/booth.icc")),
             require_hdcp: true,
         };
@@ -204,7 +205,7 @@ mod tests {
         );
         assert_eq!(json["requireHdcp"], serde_json::json!(true));
         assert_eq!(json["playerStereo"], serde_json::json!("sideBySide"));
-        assert_eq!(json["decodeResolution"], serde_json::json!("half"));
+        assert_eq!(json["cpuDecodeResolution"], serde_json::json!("half"));
         assert_eq!(
             json["playerDisplayProfile"],
             serde_json::json!("/usr/share/color/icc/booth.icc")
@@ -244,7 +245,22 @@ mod tests {
         assert_eq!(settings.player_display_profile, None);
         assert!(!settings.require_hdcp);
         assert_eq!(settings.player_stereo, StereoMode::LeftEye);
-        assert_eq!(settings.decode_resolution, DecodeResolution::Automatic);
+        assert_eq!(settings.cpu_decode_resolution, DecodeResolution::Automatic);
+    }
+
+    #[test]
+    fn a_settings_file_with_the_old_decode_resolution_key_keeps_its_choice() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join(SETTINGS_FILE);
+        std::fs::write(
+            &path,
+            r#"{"libraryRoots": ["/srv/dcp"], "decodeResolution": "quarter"}"#,
+        )
+        .unwrap();
+
+        let settings = Settings::load(&path).unwrap();
+
+        assert_eq!(settings.cpu_decode_resolution, DecodeResolution::Quarter);
     }
 
     #[test]

@@ -4,6 +4,9 @@ import { decodeScaleHudText, nextPicker, startPicker, startingScale } from '../s
 
 const SAMPLE_INTERVAL_MS = 250;
 const RATE = 24;
+const AUTOMATIC = 'automatic';
+const ON_THE_CPU = false;
+const ON_THE_DEVICE = true;
 
 function playing(fields) {
   return { paused: false, eof: false, container_fps: RATE, decoder_fps: RATE, dropped_frames_not_decoded: 0, ...fields };
@@ -13,7 +16,7 @@ function playing(fields) {
 function scalesOver(samples, state = startPicker(0)) {
   const scales = [];
   samples.forEach((sample, index) => {
-    state = nextPicker(state, sample, index * SAMPLE_INTERVAL_MS);
+    state = nextPicker(state, sample, index * SAMPLE_INTERVAL_MS, AUTOMATIC, ON_THE_CPU);
     scales.push(state.scale);
   });
   return { scales, state };
@@ -77,8 +80,61 @@ test('a restart begins at full, and a fixed choice decodes at its own scale', ()
   const { state } = scalesOver(seconds(6, playing({ decoder_fps: 20 })));
   assert.equal(state.scale, 'half');
   assert.equal(startPicker(5000).scale, 'full');
-  assert.equal(startingScale('automatic'), 'full');
-  assert.equal(startingScale('quarter'), 'quarter');
+  assert.equal(startingScale('automatic', ON_THE_CPU), 'full');
+  assert.equal(startingScale('quarter', ON_THE_CPU), 'quarter');
+});
+
+test('quarter on the cpu starts every film at quarter, on the device every film starts at full', () => {
+  assert.equal(startingScale('quarter', ON_THE_CPU), 'quarter');
+  assert.equal(startingScale('quarter', ON_THE_DEVICE), 'full');
+  assert.equal(startingScale('half', ON_THE_DEVICE), 'full');
+});
+
+// recorded every quarter second from a load of the 4K Sched4 DCP decoding on the RTX 3060: shown rate, capacity, frames dropped undecoded
+const DEVICE_START = [
+  [null, null, 0], [null, null, 0], [null, null, 0], [null, null, 0], [null, null, 0], [null, null, 0], [null, null, 0],
+  [null, 27.1, 0], [73.6, 21.6, 16], [46.1, 32.4, 18], [40.2, 42.4, 20], [38.6, 51.1, 22], [38.4, 51.6, 24],
+  [45.4, 50.8, 26], [38.9, 44.9, 27], [34.1, 51.9, 27], [29.5, 45.3, 27], [25.8, 45.3, 27],
+];
+const DEVICE_STEADY = [23.4, 45.3, 27];
+
+function deviceSamples(startRows, steadySeconds) {
+  const rows = [...startRows, ...seconds(steadySeconds, DEVICE_STEADY)];
+  return rows.map(([shown, capacity, notDecoded], index) =>
+    playing({ paused: index === 0, decoder_fps: shown, decode_capacity_fps: capacity, dropped_frames_not_decoded: notDecoded }));
+}
+
+// the device batch opening one second later, its drops still coming when the old rule's three seconds ran out
+const SLOWER_DEVICE_START = [
+  ...DEVICE_START.slice(0, 9),
+  [70.0, 21.6, 17], [60.0, 21.6, 18], [55.0, 21.6, 19], [50.0, 21.6, 20],
+  ...DEVICE_START.slice(9).map(([shown, capacity, notDecoded]) => [shown, capacity, notDecoded + 4]),
+];
+
+function scalesOn(samples, cpuResolution, gpuActive) {
+  let state = startPicker(0);
+  return samples.map((sample, index) => {
+    state = nextPicker(state, sample, index * SAMPLE_INTERVAL_MS, cpuResolution, gpuActive);
+    return state.scale;
+  });
+}
+
+test('decoding on the device stays at full through the batch start and a shown rate a little under 24', () => {
+  for (const startRows of [DEVICE_START, SLOWER_DEVICE_START]) {
+    for (const cpuResolution of ['automatic', 'half', 'quarter']) {
+      const scales = scalesOn(deviceSamples(startRows, 60), cpuResolution, ON_THE_DEVICE);
+      assert.ok(scales.every((scale) => scale === 'full'), `${cpuResolution}: ${[...new Set(scales)]}`);
+    }
+  }
+});
+
+test('the slower device start read as cpu decoding steps down, the drops counting as behind', () => {
+  assert.equal(scalesOn(deviceSamples(SLOWER_DEVICE_START, 10), AUTOMATIC, ON_THE_CPU).at(-1), 'half');
+});
+
+test('a fixed cpu choice holds from the first sample however far behind', () => {
+  const scales = scalesOn(seconds(10, playing({ decoder_fps: 5 })), 'half', ON_THE_CPU);
+  assert.ok(scales.every((scale) => scale === 'half'), [...new Set(scales)].join(' '));
 });
 
 test('the HUD names the scale only when it is not full', () => {
@@ -112,7 +168,7 @@ function replay(measured, durationMs) {
     const dropped = notDecodedBefore + rows.notDecoded[row] + beyond * rows.notDecodedPerSecond;
     const sample = playing({ decode_capacity_fps: rows.capacity[row], decoder_fps: rows.shown[row], dropped_frames_not_decoded: dropped });
     const scale = state.scale;
-    state = nextPicker(state, sample, now);
+    state = nextPicker(state, sample, now, AUTOMATIC, ON_THE_CPU);
     scales.push(state.scale);
     if (state.scale === scale) continue;
     scaleSince = now;

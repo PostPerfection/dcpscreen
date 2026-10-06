@@ -568,20 +568,20 @@ mod tests {
     }
 
     #[test]
-    fn a_decode_resolution_change_is_refused_while_locked() {
+    fn a_cpu_decode_resolution_change_is_refused_while_locked() {
         let directory = tempfile::tempdir().unwrap();
         let lock = locked_settings(&directory);
 
         let error = lock
             .save_settings(Settings {
-                decode_resolution: crate::settings::DecodeResolution::Quarter,
+                cpu_decode_resolution: crate::settings::DecodeResolution::Quarter,
                 ..Default::default()
             })
             .unwrap_err();
 
         assert_eq!(error, LOCKED_ERROR);
         assert_eq!(
-            lock.load_settings().unwrap().settings.decode_resolution,
+            lock.load_settings().unwrap().settings.cpu_decode_resolution,
             crate::settings::DecodeResolution::Automatic
         );
     }

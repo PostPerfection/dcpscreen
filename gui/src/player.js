@@ -35,8 +35,8 @@ const playlistRowNext = document.getElementById("player-row-next");
 const holdCountdown = document.getElementById("player-hold-countdown");
 const stereoButton = document.getElementById("player-stereo-btn");
 const decodeScaleLabel = document.getElementById("player-decode-scale");
-// the main page sends the Decode Resolution choice when Settings are saved
-const DECODE_RESOLUTION_EVENT = "decode-resolution-changed";
+// the main page sends the CPU Decode Resolution choice at startup and when Settings are saved
+const CPU_DECODE_RESOLUTION_EVENT = "cpu-decode-resolution-changed";
 // what the player decodes at before anything sets it
 const PLAYER_STARTING_SCALE = "full";
 let paused = false;
@@ -142,7 +142,7 @@ stereoButton.addEventListener("click", () =>
     })
     .catch(reportFailure));
 
-let decodeResolution = AUTOMATIC_RESOLUTION;
+let cpuDecodeResolution = AUTOMATIC_RESOLUTION;
 let decodeScalePicker = startPicker(performance.now());
 let appliedDecodeScale = PLAYER_STARTING_SCALE;
 // a new source or another 3D output starts the picker again at full
@@ -159,21 +159,21 @@ async function applyDecodeScale(scale) {
 }
 
 async function pickDecodeScale(meta, stereoMode) {
-  if (decodeResolution !== AUTOMATIC_RESOLUTION) return applyDecodeScale(decodeResolution);
+  const gpuActive = await invoke("gpu_active");
   const now = performance.now();
   if (meta.source !== pickedSource || stereoMode !== pickedStereoMode) {
     pickedSource = meta.source;
     pickedStereoMode = stereoMode;
     decodeScalePicker = startPicker(now);
   }
-  decodeScalePicker = nextPicker(decodeScalePicker, meta, now);
+  decodeScalePicker = nextPicker(decodeScalePicker, meta, now, cpuDecodeResolution, gpuActive);
   await applyDecodeScale(decodeScalePicker.scale);
 }
 
-async function useDecodeResolution(resolution) {
-  decodeResolution = resolution;
+async function useCpuDecodeResolution(resolution) {
+  cpuDecodeResolution = resolution;
   decodeScalePicker = startPicker(performance.now());
-  await applyDecodeScale(startingScale(resolution));
+  await applyDecodeScale(startingScale(resolution, await invoke("gpu_active")));
 }
 
 async function followMetadata(meta) {
@@ -182,9 +182,9 @@ async function followMetadata(meta) {
   await pickDecodeScale(meta, stereoMode);
 }
 
-listen(DECODE_RESOLUTION_EVENT, (event) => useDecodeResolution(event.payload).catch(reportFailure));
+listen(CPU_DECODE_RESOLUTION_EVENT, (event) => useCpuDecodeResolution(event.payload).catch(reportFailure));
 invoke("load_settings")
-  .then((settings) => useDecodeResolution(settings.decodeResolution))
+  .then((settings) => useCpuDecodeResolution(settings.cpuDecodeResolution))
   .catch(reportFailure);
 
 watchPreviewMetadata((meta) => {

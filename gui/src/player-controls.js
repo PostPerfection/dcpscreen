@@ -22,7 +22,7 @@ export function playerControlsFromFields({
   subtitleColour,
   displayProfile,
   stereo,
-  decodeResolution,
+  cpuDecodeResolution,
 }) {
   return {
     playerPicture: {
@@ -46,7 +46,7 @@ export function playerControlsFromFields({
     },
     playerDisplayProfile: displayProfile || null,
     playerStereo: stereo,
-    decodeResolution,
+    cpuDecodeResolution,
   };
 }
 
@@ -102,10 +102,10 @@ export function playerWarningText(warnings) {
 
 // every field fills on its own, and a device list that fails leaves the saved device and says why
 export async function fillPlayerControlFields(fields, settings, { listSoundDevices, makeOption }) {
-  const { playerPicture, playerSound, playerSubtitles, playerDisplayProfile, playerStereo, decodeResolution } = settings;
+  const { playerPicture, playerSound, playerSubtitles, playerDisplayProfile, playerStereo, cpuDecodeResolution } = settings;
   fields.displayProfile.value = playerDisplayProfile ?? "";
   fields.stereo.value = playerStereo;
-  fields.decodeResolution.value = decodeResolution;
+  fields.cpuDecodeResolution.value = cpuDecodeResolution;
   fields.brightness.value = playerPicture.brightness;
   fields.maskTop.value = playerPicture.masksPercent.top;
   fields.maskBottom.value = playerPicture.masksPercent.bottom;

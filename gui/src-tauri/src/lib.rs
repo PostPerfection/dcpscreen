@@ -109,6 +109,7 @@ pub fn run() {
             display_profiles::display_profiles,
             hdcp::hdcp_supported,
             guikit::gpu::set_gpu,
+            guikit::gpu::gpu_active,
             settings::load_settings,
             settings::save_settings,
             settings::settings_check_display_profile,
