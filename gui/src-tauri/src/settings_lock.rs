@@ -129,6 +129,7 @@ impl SettingsLock {
             return Err(LOCKED_ERROR.to_string());
         }
         settings.recipient_subject_name()?;
+        settings.check_display_profile()?;
         SettingsFile { settings, ..file }.save(&self.path)
     }
 
@@ -233,6 +234,7 @@ pub fn settings_lock(lock: tauri::State<'_, SettingsLock>) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::path::Path;
 
     const PASSWORD: &str = "projectionist";
     const OTHER_PASSWORD: &str = "booth-operator";
@@ -467,5 +469,65 @@ mod tests {
         assert_eq!(state(&lock), LockState::NoPassword);
         lock.refuse_while_locked().unwrap();
         lock.save_settings(Settings::default()).unwrap();
+    }
+
+    fn written_profile(profile: &lcms2::Profile, directory: &tempfile::TempDir) -> PathBuf {
+        let path = directory.path().join("monitor.icc");
+        std::fs::write(&path, profile.icc().unwrap()).unwrap();
+        path
+    }
+
+    fn with_display_profile(profile: &Path) -> Settings {
+        Settings {
+            player_display_profile: Some(profile.to_path_buf()),
+            ..Default::default()
+        }
+    }
+
+    #[test]
+    fn a_monitor_profile_the_player_takes_is_saved() {
+        let directory = tempfile::tempdir().unwrap();
+        let profile = written_profile(&lcms2::Profile::new_srgb(), &directory);
+        let lock = SettingsLock::new(directory.path().join(SETTINGS_FILE));
+
+        lock.save_settings(with_display_profile(&profile)).unwrap();
+
+        assert_eq!(
+            lock.load_settings()
+                .unwrap()
+                .settings
+                .player_display_profile,
+            Some(profile)
+        );
+    }
+
+    #[test]
+    fn a_monitor_profile_the_player_refuses_is_not_saved_and_the_error_names_it() {
+        let directory = tempfile::tempdir().unwrap();
+        let garbage = directory.path().join("garbage.icc");
+        std::fs::write(&garbage, b"not an icc profile").unwrap();
+        let lock = SettingsLock::new(directory.path().join(SETTINGS_FILE));
+
+        let error = lock
+            .save_settings(with_display_profile(&garbage))
+            .unwrap_err();
+
+        assert!(error.contains(&garbage.display().to_string()), "{error}");
+        assert!(!lock.path.exists());
+    }
+
+    #[test]
+    fn a_monitor_profile_change_is_refused_while_locked() {
+        let directory = tempfile::tempdir().unwrap();
+        let profile = written_profile(&lcms2::Profile::new_srgb(), &directory);
+        let lock = locked_settings(&directory);
+        let before = std::fs::read_to_string(&lock.path).unwrap();
+
+        let error = lock
+            .save_settings(with_display_profile(&profile))
+            .unwrap_err();
+
+        assert_eq!(error, LOCKED_ERROR);
+        assert_eq!(std::fs::read_to_string(&lock.path).unwrap(), before);
     }
 }

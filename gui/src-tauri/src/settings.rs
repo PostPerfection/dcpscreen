@@ -1,5 +1,6 @@
 use crate::settings_lock::{LockState, SettingsLock};
 use guikit::preview::player_controls::{PictureControls, SoundControls, SubtitleControls};
+use postkit::colour::{RenderingIntent, XyzToIcc};
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 
@@ -23,11 +24,19 @@ pub struct Settings {
     pub player_picture: PictureControls,
     pub player_sound: SoundControls,
     pub player_subtitles: SubtitleControls,
+    // a monitor ICC profile for DCP pictures, None is the built-in sRGB
+    pub player_display_profile: Option<PathBuf>,
 }
 
 impl Settings {
     pub fn load(path: &Path) -> Result<Settings, String> {
         Ok(SettingsFile::load(path)?.settings)
+    }
+
+    pub fn check_display_profile(&self) -> Result<(), String> {
+        self.player_display_profile
+            .as_deref()
+            .map_or(Ok(()), check_display_profile)
     }
 
     pub fn recipient_subject_name(&self) -> Result<Option<String>, String> {
@@ -71,6 +80,16 @@ pub struct LoadedSettings {
     #[serde(flatten)]
     pub settings: Settings,
     pub settings_lock: LockState,
+}
+
+// the same check the player makes, so a profile it would refuse is never stored
+pub fn check_display_profile(profile: &Path) -> Result<(), String> {
+    XyzToIcc::new(profile, RenderingIntent::default()).map(|_| ())
+}
+
+#[tauri::command(async)]
+pub fn settings_check_display_profile(profile: PathBuf) -> Result<(), String> {
+    check_display_profile(&profile)
 }
 
 #[tauri::command(async)]
@@ -124,6 +143,7 @@ mod tests {
                 offset_percent: 4.0,
                 colour: Some("#ffcc00".to_string()),
             },
+            player_display_profile: Some(PathBuf::from("/usr/share/color/icc/booth.icc")),
         };
 
         SettingsFile {
@@ -162,6 +182,10 @@ mod tests {
             json["playerSubtitles"]["colour"],
             serde_json::json!("#ffcc00")
         );
+        assert_eq!(
+            json["playerDisplayProfile"],
+            serde_json::json!("/usr/share/color/icc/booth.icc")
+        );
     }
 
     #[test]
@@ -194,6 +218,7 @@ mod tests {
         );
         assert_eq!(settings.player_sound, SoundControls::default());
         assert_eq!(settings.player_subtitles, SubtitleControls::default());
+        assert_eq!(settings.player_display_profile, None);
     }
 
     #[test]

@@ -38,7 +38,7 @@ export GRK_PLUGIN_PATH=/path/to/grok/lib64
 ./gui/src-tauri/target/debug/dcpscreen-gui
 ```
 
-Play opens the player as a normal window. A version file plays with the reels and sound it takes from its original version, which has to be in the library too. Full screen goes to the display named in Settings, or to the main window's display when none is named or it is not connected.
+Play opens the player as a normal window. DCP pictures are shown through the Monitor Profile from Settings when one is set, which takes a matrix and curves RGB display profile such as the ones colord makes from a monitor's EDID. On Linux the list under the field holds the profiles colord has for the full screen display. A version file plays with the reels and sound it takes from its original version, which has to be in the library too. Full screen goes to the display named in Settings, or to the main window's display when none is named or it is not connected.
 
 grok looks for `libgrokj2k_plugin` in the directory `GRK_PLUGIN_PATH` names, then in the working directory, then in the executable's own directory, and never on `LD_LIBRARY_PATH`. Without the plugin the player decodes on the CPU. `GRK_NO_PLUGIN=1` keeps grok on the CPU even when the plugin is found.
 

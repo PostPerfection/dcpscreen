@@ -1,6 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
+  displayProfileChoices,
   playerControlCommands,
   playerControlsFromFields,
   playerWarningText,
@@ -20,6 +21,7 @@ const FIELDS = {
   subtitleOffsetPercent: '4',
   subtitleColourOverridden: false,
   subtitleColour: '#ffcc00',
+  displayProfile: '/profiles/booth.icc',
 };
 
 const CONTROLS = playerControlsFromFields(FIELDS);
@@ -29,7 +31,9 @@ test('the form fields become the settings the backend reads', () => {
     playerPicture: { brightness: 1.5, masksPercent: { top: 5, bottom: 5, left: 0, right: 2.5 }, scaling: 'fill' },
     playerSound: { device: null, layout: 'fivePointOne', delayMilliseconds: -40 },
     playerSubtitles: { offsetPercent: 4, colour: null },
+    playerDisplayProfile: '/profiles/booth.icc',
   });
+  assert.equal(playerControlsFromFields({ ...FIELDS, displayProfile: '' }).playerDisplayProfile, null);
 });
 
 test('the subtitle colour is only kept while the override is ticked', () => {
@@ -46,8 +50,20 @@ test('with nothing applied yet every control is sent', () => {
       'preview_set_sound_layout',
       'preview_set_sound_delay',
       'preview_set_subtitle_presentation',
+      'preview_set_display_profile',
     ],
   );
+});
+
+test('a changed monitor profile is sent on its own, and clearing it sends null', () => {
+  const cleared = playerControlsFromFields({ ...FIELDS, displayProfile: '' });
+  assert.deepEqual(playerControlCommands(CONTROLS, cleared), [['preview_set_display_profile', { profile: null }]]);
+});
+
+test('colord profiles are listed by file name', () => {
+  assert.deepEqual(displayProfileChoices(['/home/booth/.local/share/icc/edid-ee14.icc']), [
+    { path: '/home/booth/.local/share/icc/edid-ee14.icc', label: 'edid-ee14.icc' },
+  ]);
 });
 
 test('only the controls that changed are sent, so the sound is not reopened for a brightness change', () => {

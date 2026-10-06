@@ -2,6 +2,7 @@ import { withSavedChoice } from "./saved-choices.js";
 
 const WARNING_PREFIX = "Player: ";
 const WARNING_SEPARATOR = ". ";
+export const DISPLAY_PROFILE_COMMAND = "preview_set_display_profile";
 
 export function playerControlsFromFields({
   brightness,
@@ -16,6 +17,7 @@ export function playerControlsFromFields({
   subtitleOffsetPercent,
   subtitleColourOverridden,
   subtitleColour,
+  displayProfile,
 }) {
   return {
     playerPicture: {
@@ -37,6 +39,7 @@ export function playerControlsFromFields({
       offsetPercent: Number(subtitleOffsetPercent),
       colour: subtitleColourOverridden ? subtitleColour : null,
     },
+    playerDisplayProfile: displayProfile || null,
   };
 }
 
@@ -63,7 +66,15 @@ export function playerControlCommands(applied, settings) {
   if (changed((controls) => controls.playerSubtitles)) {
     commands.push(["preview_set_subtitle_presentation", { subtitles: settings.playerSubtitles }]);
   }
+  if (changed((controls) => controls.playerDisplayProfile)) {
+    commands.push([DISPLAY_PROFILE_COMMAND, { profile: settings.playerDisplayProfile }]);
+  }
   return commands;
+}
+
+// the colord profiles as choices, the file name shown and the path kept
+export function displayProfileChoices(paths) {
+  return paths.map((path) => ({ path, label: path.split(/[/\\]/).pop() }));
 }
 
 export function soundDeviceChoices(deviceNames, savedDevice) {

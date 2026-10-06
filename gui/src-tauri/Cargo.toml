@@ -21,14 +21,21 @@ serde_json = "1"
 chrono = "0.4"
 uuid = "1"
 dirs = "6"
-postkit = { path = "../../extern/postkit" }
+# icc checks a monitor profile before it is saved
+postkit = { path = "../../extern/postkit", features = ["icc"] }
 guikit = { path = "../../extern/guikit/rust" }
 guikit-startup = { path = "../../extern/guikit/startup" }
 dcpdoctor-core = { path = "../../extern/dcpdoctor/rust/crates/dcpdoctor-core" }
 argon2 = "0.6.0"
 
+[target.'cfg(target_os = "linux")'.dependencies]
+# asks colord for the profiles of a display, tao already links it
+dbus = "0.9"
+
 [dev-dependencies]
 tempfile = "3"
+# writes the monitor profiles the settings tests save
+lcms2 = "6"
 
 # tauri's CLI turns this off for `tauri dev` so the page comes from vite.
 # production keeps it on so the webview serves the bundled frontend instead of

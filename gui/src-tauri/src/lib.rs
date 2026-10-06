@@ -36,6 +36,7 @@ const PLAYER_WINDOW_MINIMUM_HEIGHT: f64 = 180.0;
 // the main page stops playback when it hears this
 const PLAYER_CLOSE_REQUESTED_EVENT: &str = "player-close-requested";
 
+mod display_profiles;
 mod keys;
 mod library;
 mod play;
@@ -101,9 +102,12 @@ pub fn run() {
             guikit::preview::player_controls::preview_set_sound_delay,
             guikit::preview::player_controls::preview_set_subtitle_presentation,
             guikit::preview::player_controls::preview_sound_devices,
+            guikit::preview::player_controls::preview_set_display_profile,
+            display_profiles::display_profiles,
             guikit::gpu::set_gpu,
             settings::load_settings,
             settings::save_settings,
+            settings::settings_check_display_profile,
             settings_lock::settings_lock_set,
             settings_lock::settings_lock_change,
             settings_lock::settings_lock_remove,

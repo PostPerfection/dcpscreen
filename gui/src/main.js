@@ -1,6 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
-import { Window, availableMonitors } from "@tauri-apps/api/window";
+import { Window, availableMonitors, currentMonitor } from "@tauri-apps/api/window";
 import { open, message } from "@tauri-apps/plugin-dialog";
 import { enablePreviewTransport, initPreview, previewFile, stopPreview, watchPreviewMetadata } from "../../extern/guikit/src/preview.js";
 import { initJobsPanel, refreshJobs, startJobsPolling, stopJobsPolling } from "../../extern/guikit/src/jobs.js";
@@ -22,11 +22,22 @@ import {
   withoutRow,
 } from "./screening-playlist.js";
 import { playerMonitorChoices } from "./player-monitor.js";
-import { playerControlCommands, playerControlsFromFields, playerWarningText, soundDeviceChoices } from "./player-controls.js";
+import {
+  DISPLAY_PROFILE_COMMAND,
+  displayProfileChoices,
+  playerControlCommands,
+  playerControlsFromFields,
+  playerWarningText,
+  soundDeviceChoices,
+} from "./player-controls.js";
 
 const KDM_FILTERS = [{ name: "KDM", extensions: ["xml"] }];
 const CERTIFICATE_FILTERS = [{ name: "Certificate", extensions: ["pem", "crt"] }];
 const PRIVATE_KEY_FILTERS = [{ name: "Private key", extensions: ["pem", "key"] }];
+const DISPLAY_PROFILE_FILTERS = [{ name: "ICC profile", extensions: ["icc", "icm"] }];
+const COLORD_PROFILES_TEXT = "Profiles colord has for this display";
+const NO_COLORD_PROFILES_TEXT = "colord has no profile for this display";
+const DISPLAY_PROFILE_REFUSED_STATUS = "Monitor profile refused";
 const STILL_IMAGE_FILTERS = [{ name: "Image", extensions: ["png", "jpg", "jpeg"] }];
 const DEFAULT_PLAYLIST_NAME = "Playlist";
 const PLAYLIST_SAVED_STATUS = "Playlist saved";
@@ -74,6 +85,9 @@ const playerFields = {
   subtitleOffsetPercent: document.getElementById("set-player-subtitle-offset"),
   subtitleColourOverridden: document.getElementById("set-player-subtitle-colour-overridden"),
   subtitleColour: document.getElementById("set-player-subtitle-colour"),
+  displayProfile: document.getElementById("set-player-display-profile"),
+  colordProfiles: document.getElementById("set-player-display-profile-colord"),
+  displayProfileError: document.getElementById("set-player-display-profile-error"),
 };
 const settingsView = document.getElementById("view-settings");
 const passwordFields = {
@@ -359,7 +373,27 @@ async function fillPlayerSettings(settings) {
     ...choices.map((choice) => choiceOption(choice.name, choice.label)),
   );
   playerMonitorSelect.value = settings.playerMonitor ?? "";
+  await fillColordProfiles();
   await fillPlayerControls(settings);
+}
+
+// the display full screen goes to, which is the main window's when none is chosen
+async function fullScreenDisplayName() {
+  return playerMonitorSelect.value || (await currentMonitor())?.name;
+}
+
+async function fillColordProfiles() {
+  const name = await fullScreenDisplayName();
+  const choices = name ? displayProfileChoices(await invoke("display_profiles", { monitor: name })) : [];
+  const placeholder = choices.length ? COLORD_PROFILES_TEXT : NO_COLORD_PROFILES_TEXT;
+  playerFields.colordProfiles.replaceChildren(
+    choiceOption("", placeholder),
+    ...choices.map((choice) => {
+      const option = choiceOption(choice.path, choice.label);
+      option.title = choice.path;
+      return option;
+    }),
+  );
 }
 
 function showBrightness() {
@@ -370,7 +404,8 @@ function enableSubtitleColour() {
   playerFields.subtitleColour.disabled = !playerFields.subtitleColourOverridden.checked;
 }
 
-async function fillPlayerControls({ playerPicture, playerSound, playerSubtitles }) {
+async function fillPlayerControls({ playerPicture, playerSound, playerSubtitles, playerDisplayProfile }) {
+  playerFields.displayProfile.value = playerDisplayProfile ?? "";
   playerFields.brightness.value = playerPicture.brightness;
   showBrightness();
   playerFields.maskTop.value = playerPicture.masksPercent.top;
@@ -406,15 +441,39 @@ function playerControlsFromForm() {
     subtitleOffsetPercent: playerFields.subtitleOffsetPercent.value,
     subtitleColourOverridden: playerFields.subtitleColourOverridden.checked,
     subtitleColour: playerFields.subtitleColour.value,
+    displayProfile: playerFields.displayProfile.value,
+  });
+}
+
+function showDisplayProfileError(error) {
+  playerFields.displayProfileError.textContent = String(error);
+  playerFields.displayProfileError.hidden = false;
+  setStatus(`${DISPLAY_PROFILE_REFUSED_STATUS}: ${error}`);
+}
+
+// a refused profile leaves the one the player has, and the reason goes under the field
+async function applyDisplayProfile(args) {
+  playerFields.displayProfileError.hidden = true;
+  await invoke(DISPLAY_PROFILE_COMMAND, args).catch(showDisplayProfileError);
+}
+
+// false when the player would refuse the chosen profile, which is then not saved
+async function displayProfileAccepted(profile) {
+  playerFields.displayProfileError.hidden = true;
+  if (!profile) return true;
+  return invoke("settings_check_display_profile", { profile }).then(() => true, (error) => {
+    showDisplayProfileError(error);
+    return false;
   });
 }
 
 async function applyPlayerControls(settings) {
   for (const [command, args] of playerControlCommands(appliedPlayerControls, settings)) {
-    await invoke(command, args);
+    if (command === DISPLAY_PROFILE_COMMAND) await applyDisplayProfile(args);
+    else await invoke(command, args);
   }
-  const { playerPicture, playerSound, playerSubtitles } = settings;
-  appliedPlayerControls = { playerPicture, playerSound, playerSubtitles };
+  const { playerPicture, playerSound, playerSubtitles, playerDisplayProfile } = settings;
+  appliedPlayerControls = { playerPicture, playerSound, playerSubtitles, playerDisplayProfile };
 }
 
 function showPlayerWarnings(metadata) {
@@ -478,6 +537,7 @@ document.getElementById("settings-form").addEventListener("submit", (event) => {
       playerMonitor: playerMonitorSelect.value,
     });
     Object.assign(settings, playerControlsFromForm());
+    if (!(await displayProfileAccepted(settings.playerDisplayProfile))) return;
     const gpuFailure = await applyGpuSetting(settings);
     await invoke("save_settings", { settings: gpuFailure ? { ...settings, gpu: false } : settings });
     await applyPlayerControls(settings);
@@ -523,6 +583,15 @@ document.getElementById("settings-lock").addEventListener("click", reportingErro
   runPasswordCommand("settings_lock", {}, SETTINGS_LOCKED_STATUS)));
 
 playerFields.brightness.addEventListener("input", showBrightness);
+document.getElementById("set-player-display-profile-browse")
+  .addEventListener("click", reportingErrors(() => browseInto(playerFields.displayProfile, DISPLAY_PROFILE_FILTERS)));
+document.getElementById("set-player-display-profile-clear").addEventListener("click", () => {
+  playerFields.displayProfile.value = "";
+});
+playerFields.colordProfiles.addEventListener("change", () => {
+  if (playerFields.colordProfiles.value) playerFields.displayProfile.value = playerFields.colordProfiles.value;
+});
+playerMonitorSelect.addEventListener("change", reportingErrors(fillColordProfiles));
 playerFields.subtitleColourOverridden.addEventListener("change", enableSubtitleColour);
 watchPreviewMetadata(showPlayerWarnings);
 
