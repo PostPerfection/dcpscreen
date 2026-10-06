@@ -56,6 +56,10 @@ fn data_dir() -> std::path::PathBuf {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    if let Some(directory) = verify_jobs::verify_child_directory() {
+        verify_jobs::print_verdict(&directory);
+        return;
+    }
     #[cfg(target_os = "linux")]
     guikit_startup::prefer_shared_memory_webkit_frames_on_nvidia();
     #[cfg(unix)]

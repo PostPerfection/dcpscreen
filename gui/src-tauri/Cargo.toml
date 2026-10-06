@@ -28,6 +28,10 @@ guikit-startup = { path = "../../extern/guikit/startup" }
 dcpdoctor-core = { path = "../../extern/dcpdoctor/rust/crates/dcpdoctor-core" }
 argon2 = "0.6.0"
 
+[target.'cfg(unix)'.dependencies]
+# kills a cancelled verification's process group
+libc = "0.2"
+
 [target.'cfg(target_os = "linux")'.dependencies]
 # asks colord for the profiles of a display, tao already links it
 dbus = "0.9"

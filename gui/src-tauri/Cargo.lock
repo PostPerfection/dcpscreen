@@ -1037,6 +1037,7 @@ dependencies = [
  "guikit",
  "guikit-startup",
  "lcms2",
+ "libc",
  "postkit",
  "postkit-ffmpeg-link-search",
  "serde",

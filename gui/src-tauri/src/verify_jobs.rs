@@ -3,13 +3,19 @@ use dcpdoctor_core::{Severity, VerifyOptions, VerifyResult};
 use postkit::job_queue::{JobInfo, JobState, QueueJob};
 use postkit::package_library::{Verdict, VerdictState};
 use serde::{Deserialize, Serialize};
+use std::io::Read;
 use std::path::{Path, PathBuf};
+use std::process::{Command, ExitStatus, Stdio};
 use std::sync::mpsc;
+use std::time::Duration;
 use tauri::{AppHandle, Manager};
 
 const JOBS_FILE: &str = "jobs.jsonl";
 const JOBS_FILE_ENVIRONMENT_VARIABLE: &str = "DCPSCREEN_JOBS_FILE";
-const VERIFY_PANICKED_MESSAGE: &str = "dcpdoctor stopped with a panic";
+const VERIFY_STOPPED_MESSAGE: &str = "dcpdoctor stopped without a verdict";
+// a verification runs in a copy of the app started with this, so a cancel can kill it and the ffmpeg it runs
+const VERIFY_CHILD_ARGUMENT: &str = "--verify-package";
+const CANCEL_POLL_INTERVAL: Duration = Duration::from_millis(50);
 
 #[derive(Clone, Serialize, Deserialize)]
 pub struct VerifyJob {
@@ -70,30 +76,105 @@ fn run_queued_jobs(app: &AppHandle) {
     let library = app.state::<LibraryState>();
     while let Some(job) = queue.take_next() {
         queue.start(&job);
-        let directory = job.directory.clone();
-        let verified = std::thread::spawn(move || {
-            dcpdoctor_core::verify(&directory, &VerifyOptions::strict())
-        })
-        .join();
-        let (state, message, verdict) = match verified {
-            _ if queue.is_cancelled() => (JobState::Cancelled, String::new(), Verdict::default()),
-            Ok(result) => {
-                let verdict = verdict_from(&result, now_rfc3339());
-                let message = format!("errors: {}", verdict.error_count);
-                (JobState::Completed, message, verdict)
-            }
-            Err(_) => (
-                JobState::Failed,
-                VERIFY_PANICKED_MESSAGE.to_string(),
-                Verdict::default(),
-            ),
-        };
+        let (state, message, verdict) =
+            match verify_in_child(&job.directory, || queue.is_cancelled()) {
+                None => (JobState::Cancelled, String::new(), Verdict::default()),
+                Some(Ok(verdict)) => {
+                    let message = format!("errors: {}", verdict.error_count);
+                    (JobState::Completed, message, verdict)
+                }
+                Some(Err(message)) => (JobState::Failed, message, Verdict::default()),
+            };
         match library.set_verdict(&job.directory, verdict) {
             Ok(()) => queue.finish(&job, state, &message),
             Err(error) => queue.finish(&job, JobState::Failed, &error),
         }
     }
     queue.clear_current();
+}
+
+// the package a copy of the app started by `verify_in_child` verifies
+pub fn verify_child_directory() -> Option<PathBuf> {
+    let mut arguments = std::env::args_os().skip(1);
+    if arguments.next()? != VERIFY_CHILD_ARGUMENT {
+        return None;
+    }
+    arguments.next().map(PathBuf::from)
+}
+
+pub fn print_verdict(directory: &Path) {
+    let result = dcpdoctor_core::verify(directory, &VerifyOptions::strict());
+    let verdict = verdict_from(&result, now_rfc3339());
+    println!(
+        "{}",
+        serde_json::to_string(&verdict).expect("a verdict serializes")
+    );
+}
+
+// None once cancelled
+fn verify_in_child(
+    directory: &Path,
+    is_cancelled: impl Fn() -> bool,
+) -> Option<Result<Verdict, String>> {
+    let program = match std::env::current_exe() {
+        Ok(program) => program,
+        Err(error) => return Some(Err(format!("cannot find the app to verify with: {error}"))),
+    };
+    let mut command = Command::new(program);
+    command.arg(VERIFY_CHILD_ARGUMENT).arg(directory);
+    let (status, stdout) = match output_unless_cancelled(command, is_cancelled) {
+        Ok(output) => output?,
+        Err(error) => return Some(Err(format!("cannot start the verification: {error}"))),
+    };
+    if !status.success() {
+        return Some(Err(format!("{VERIFY_STOPPED_MESSAGE}: {status}")));
+    }
+    Some(
+        serde_json::from_str(&stdout).map_err(|error| format!("{VERIFY_STOPPED_MESSAGE}: {error}")),
+    )
+}
+
+// None once cancel killed the child and every process it started
+fn output_unless_cancelled(
+    mut command: Command,
+    is_cancelled: impl Fn() -> bool,
+) -> std::io::Result<Option<(ExitStatus, String)>> {
+    command.stdout(Stdio::piped());
+    #[cfg(unix)]
+    std::os::unix::process::CommandExt::process_group(&mut command, 0);
+    let mut child = command.spawn()?;
+    let mut stdout = child.stdout.take().expect("stdout is piped");
+    let reader = std::thread::spawn(move || {
+        let mut text = String::new();
+        stdout.read_to_string(&mut text).map(|_| text)
+    });
+    loop {
+        if let Some(status) = child.try_wait()? {
+            let text = reader.join().expect("the stdout reader panicked")?;
+            return Ok(Some((status, text)));
+        }
+        if is_cancelled() {
+            kill_process_group(&mut child)?;
+            child.wait()?;
+            return Ok(None);
+        }
+        std::thread::sleep(CANCEL_POLL_INTERVAL);
+    }
+}
+
+#[cfg(unix)]
+fn kill_process_group(child: &mut std::process::Child) -> std::io::Result<()> {
+    let group = i32::try_from(child.id()).expect("a process id fits an i32");
+    // SAFETY: kill takes plain integers, a negative pid names the child's process group
+    if unsafe { libc::kill(-group, libc::SIGKILL) } == 0 {
+        return Ok(());
+    }
+    Err(std::io::Error::last_os_error())
+}
+
+#[cfg(not(unix))]
+fn kill_process_group(child: &mut std::process::Child) -> std::io::Result<()> {
+    child.kill()
 }
 
 fn now_rfc3339() -> String {
@@ -191,6 +272,56 @@ mod tests {
                 verified_at: Some(VERIFIED_AT.into()),
             }
         );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn cancel_kills_a_running_verification_and_the_process_it_started_within_a_second() {
+        let directory = tempfile::tempdir().unwrap();
+        let started_pid_file = directory.path().join("started.pid");
+        let mut command = Command::new("sh");
+        command.arg("-c").arg(format!(
+            "sleep 60 & echo $! > {}; wait",
+            started_pid_file.display()
+        ));
+        let cancel_at = std::sync::Mutex::new(None);
+
+        let output = output_unless_cancelled(command, || {
+            if !started_pid_file.exists() {
+                return false;
+            }
+            cancel_at
+                .lock()
+                .unwrap()
+                .get_or_insert_with(std::time::Instant::now);
+            true
+        })
+        .unwrap();
+
+        assert!(output.is_none());
+        let stopped_after = cancel_at.lock().unwrap().unwrap().elapsed();
+        assert!(stopped_after < Duration::from_secs(1), "{stopped_after:?}");
+        let started_pid = std::fs::read_to_string(&started_pid_file).unwrap();
+        let started_process = PathBuf::from(format!("/proc/{}", started_pid.trim()));
+        let deadline = std::time::Instant::now() + Duration::from_secs(1);
+        while started_process.exists() && std::time::Instant::now() < deadline {
+            std::thread::sleep(CANCEL_POLL_INTERVAL);
+        }
+        assert!(
+            !started_process.exists(),
+            "the sleep the job started still runs"
+        );
+    }
+
+    #[test]
+    fn a_child_that_finishes_hands_back_its_output() {
+        let mut command = Command::new("sh");
+        command.arg("-c").arg("echo verdict");
+
+        let (status, stdout) = output_unless_cancelled(command, || false).unwrap().unwrap();
+
+        assert!(status.success());
+        assert_eq!(stdout, "verdict\n");
     }
 
     #[test]
