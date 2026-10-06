@@ -194,7 +194,7 @@ mod tests {
     }
 
     #[test]
-    fn a_package_with_no_track_files_fails_strict_verification() {
+    fn a_package_with_schema_violations_fails_strict_verification() {
         let directory = tempfile::tempdir().unwrap();
         crate::test_fixtures::write_package(directory.path(), &[crate::test_fixtures::FEATURE]);
 
