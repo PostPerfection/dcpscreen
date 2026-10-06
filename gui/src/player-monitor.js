@@ -1,7 +1,7 @@
 const NOT_CONNECTED_SUFFIX = " (not connected)";
 
 // the saved monitor while it is connected, otherwise the one the main window is on
-export function monitorForPlayer(monitors, savedName, mainWindowMonitor) {
+export function fullscreenMonitor(monitors, savedName, mainWindowMonitor) {
   const saved = monitors.find((monitor) => monitor.name !== null && monitor.name === savedName);
   return saved ?? mainWindowMonitor ?? monitors[0];
 }

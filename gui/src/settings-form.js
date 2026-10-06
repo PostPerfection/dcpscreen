@@ -6,7 +6,6 @@ export function settingsFromFields({
   gpuLicense,
   gpuRegistrationUrl,
   playerMonitor,
-  playerFullscreen,
 }) {
   return {
     libraryRoots,
@@ -16,7 +15,6 @@ export function settingsFromFields({
     gpuLicense: gpuLicense || null,
     gpuRegistrationUrl: gpuRegistrationUrl || null,
     playerMonitor: playerMonitor || null,
-    playerFullscreen,
   };
 }
 

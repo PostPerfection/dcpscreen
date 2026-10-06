@@ -1,6 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
-import { Window, availableMonitors, currentMonitor } from "@tauri-apps/api/window";
+import { Window, availableMonitors } from "@tauri-apps/api/window";
 import { open, message } from "@tauri-apps/plugin-dialog";
 import { initPreview, previewFile, stopPreview } from "../../extern/guikit/src/preview.js";
 import { initJobsPanel, refreshJobs, startJobsPolling, stopJobsPolling } from "../../extern/guikit/src/jobs.js";
@@ -9,7 +9,7 @@ import { initKeysPanel, refreshKeys } from "../../extern/guikit/src/keys.js";
 import { initGpuSettings, fillGpuSettings, gpuSettingsFromForm, uncheckGpu, applyGpuSetting } from "../../extern/guikit/src/gpu-settings.js";
 import { settingsFromFields, withLibraryRoot, withoutLibraryRoot } from "./settings-form.js";
 import { playRefusalText } from "./play-refusal.js";
-import { monitorForPlayer, playerMonitorChoices } from "./player-monitor.js";
+import { playerMonitorChoices } from "./player-monitor.js";
 
 const KDM_FILTERS = [{ name: "KDM", extensions: ["xml"] }];
 const CERTIFICATE_FILTERS = [{ name: "Certificate", extensions: ["pem", "crt"] }];
@@ -29,7 +29,6 @@ const certificateInput = document.getElementById("set-recipient-certificate");
 const privateKeyInput = document.getElementById("set-recipient-key");
 const libraryRootsList = document.getElementById("set-library-roots");
 const playerMonitorSelect = document.getElementById("set-player-monitor");
-const playerFullscreenInput = document.getElementById("set-player-fullscreen");
 const playerWindow = await Window.getByLabel(PLAYER_WINDOW_LABEL);
 let libraryRoots = [];
 let libraryPoll = null;
@@ -103,16 +102,10 @@ async function refreshLibraryFromDisk() {
   await refreshLibrary();
 }
 
+// a player hidden while full screen would come back full screen
 async function showPlayerWindow() {
-  const settings = await invoke("load_settings");
-  const monitor = monitorForPlayer(await availableMonitors(), settings.playerMonitor, await currentMonitor());
+  await playerWindow.setFullscreen(false);
   await playerWindow.show();
-  if (settings.playerFullscreen) {
-    await playerWindow.setFullscreenOnMonitor(monitor.position);
-  } else {
-    await playerWindow.setFullscreen(false);
-    await playerWindow.setPosition(monitor.position);
-  }
   await playerWindow.setFocus();
 }
 
@@ -191,7 +184,6 @@ async function fillPlayerSettings(settings) {
     ...choices.map((choice) => monitorOption(choice.name, choice.label)),
   );
   playerMonitorSelect.value = settings.playerMonitor ?? "";
-  playerFullscreenInput.checked = settings.playerFullscreen;
 }
 
 async function showSettings() {
@@ -242,7 +234,6 @@ document.getElementById("settings-form").addEventListener("submit", (event) => {
       recipientKey: privateKeyInput.value,
       ...gpuSettingsFromForm(),
       playerMonitor: playerMonitorSelect.value,
-      playerFullscreen: playerFullscreenInput.checked,
     });
     const gpuFailure = await applyGpuSetting(settings);
     await invoke("save_settings", { settings: gpuFailure ? { ...settings, gpu: false } : settings });

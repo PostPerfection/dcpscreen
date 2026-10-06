@@ -123,7 +123,7 @@ pub fn run() {
                 },
             )?;
             #[cfg(target_os = "linux")]
-            guikit::startup::create_hidden_window(
+            guikit::startup::create_player_window(
                 app,
                 &guikit::startup::MainWindow {
                     label: PLAYER_WINDOW_LABEL,
@@ -137,6 +137,12 @@ pub fn run() {
                 },
                 PLAYER_PAGE,
             )?;
+            #[cfg(target_os = "linux")]
+            app.manage(guikit::preview::create_player_under_page(
+                app,
+                PLAYER_WINDOW_LABEL,
+            ));
+            #[cfg(not(target_os = "linux"))]
             app.manage(guikit::preview::create_player(app, PLAYER_WINDOW_LABEL));
             app.manage(verify_jobs::start_worker(app.handle().clone()));
             Ok(())

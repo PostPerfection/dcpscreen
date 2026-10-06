@@ -1,12 +1,36 @@
+@import "../../extern/guikit/src/base.css";
+
 html,
 body {
-  margin: 0;
   height: 100%;
   overflow: hidden;
-  background: #000;
+  background: transparent;
 }
 
 #preview-surface {
   position: fixed;
   inset: 0;
+}
+
+.player-hud {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.6);
+  border-top: none;
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.3s, visibility 0.3s;
+}
+
+.player-hud.player-hud-shown {
+  opacity: 1;
+  visibility: visible;
+}
+
+.player-hint {
+  color: var(--text);
+  font-size: 12px;
+  white-space: nowrap;
 }

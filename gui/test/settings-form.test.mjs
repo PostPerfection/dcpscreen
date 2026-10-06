@@ -12,7 +12,6 @@ test('empty recipient, GPU and player monitor fields are saved as unset', () => 
       gpuLicense: '',
       gpuRegistrationUrl: 'https://licence.example/register',
       playerMonitor: '',
-      playerFullscreen: false,
     }),
     {
       libraryRoots: ['/srv/dcp'],
@@ -22,7 +21,6 @@ test('empty recipient, GPU and player monitor fields are saved as unset', () => 
       gpuLicense: null,
       gpuRegistrationUrl: 'https://licence.example/register',
       playerMonitor: null,
-      playerFullscreen: false,
     },
   );
 });

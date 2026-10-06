@@ -1,21 +1,21 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { monitorForPlayer, playerMonitorChoices } from '../src/player-monitor.js';
+import { fullscreenMonitor, playerMonitorChoices } from '../src/player-monitor.js';
 
 const LAPTOP = { name: 'eDP-1', size: { width: 2880, height: 1800 }, position: { x: 0, y: 0 } };
 const PROJECTOR = { name: 'HDMI-1', size: { width: 4096, height: 2160 }, position: { x: 2880, y: 0 } };
 const UNNAMED = { name: null, size: { width: 1920, height: 1080 }, position: { x: 6976, y: 0 } };
 
 test('the saved monitor is chosen while it is connected', () => {
-  assert.equal(monitorForPlayer([LAPTOP, PROJECTOR], 'HDMI-1', LAPTOP), PROJECTOR);
+  assert.equal(fullscreenMonitor([LAPTOP, PROJECTOR], 'HDMI-1', LAPTOP), PROJECTOR);
 });
 
 test('a saved monitor that is not connected falls back to the main window monitor', () => {
-  assert.equal(monitorForPlayer([LAPTOP], 'HDMI-1', LAPTOP), LAPTOP);
+  assert.equal(fullscreenMonitor([LAPTOP], 'HDMI-1', LAPTOP), LAPTOP);
 });
 
 test('no saved monitor plays on the main window monitor, even next to an unnamed one', () => {
-  assert.equal(monitorForPlayer([UNNAMED, PROJECTOR], null, PROJECTOR), PROJECTOR);
+  assert.equal(fullscreenMonitor([UNNAMED, PROJECTOR], null, PROJECTOR), PROJECTOR);
 });
 
 test('the choices list connected monitors with their size and skip unnamed ones', () => {

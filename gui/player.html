@@ -7,8 +7,21 @@
   <link rel="stylesheet" href="/src/player.css" />
 </head>
 <body>
-  <!-- the app draws the video over this element, so nothing may be painted inside it -->
+  <!-- the video is drawn under this see-through page -->
   <div id="preview-surface"></div>
+  <div id="player-hud" class="timeline-transport player-hud">
+    <button id="timeline-play-btn" class="btn-sm" title="Play/Pause">▶</button>
+    <span id="timeline-position" class="timecode">00:00:00:00</span>
+    <div id="timeline-scrubber" class="timeline-scrubber">
+      <div class="timeline-scrubber-track">
+        <div id="timeline-playhead" class="timeline-playhead" style="left: 0%"></div>
+      </div>
+    </div>
+    <span id="timeline-duration" class="timecode" data-raw="0">00:00:00:00</span>
+    <span id="player-hint" class="player-hint" hidden>Escape leaves full screen</span>
+    <button id="player-stop-btn" class="btn-sm" title="Stop and close the player">⏹</button>
+    <button id="player-fullscreen-btn" class="btn-sm" title="Full screen (F)">⛶</button>
+  </div>
   <script type="module" src="/src/player.js"></script>
 </body>
 </html>
