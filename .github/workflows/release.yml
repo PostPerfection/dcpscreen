@@ -1,0 +1,465 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  version:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Verify release version
+        shell: bash
+        run: |
+          desktop_crate_version=$(awk '/^\[package\]/{found=1; next} /^\[/{found=0} found && /^version = / {gsub(/[" ]/, "", $3); print $3; exit}' gui/src-tauri/Cargo.toml)
+          desktop_version=$(jq -r .version gui/src-tauri/tauri.conf.json)
+          frontend_version=$(jq -r .version gui/package.json)
+
+          release_version="$desktop_version"
+          if [ "$GITHUB_REF_TYPE" = "tag" ]; then
+            release_version="${GITHUB_REF_NAME#v}"
+          fi
+
+          for version in "$desktop_crate_version" "$desktop_version" "$frontend_version"; do
+            if [ "$version" != "$release_version" ]; then
+              echo "::error::Tag $GITHUB_REF_NAME does not match project version $version"
+              exit 1
+            fi
+          done
+
+      - name: Release notes from CHANGELOG.md
+        if: github.ref_type == 'tag'
+        shell: bash
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          notes="$RUNNER_TEMP/release-notes.md"
+          awk -v heading="## [$version]" 'index($0, heading) == 1 {found = 1; next} found && /^## / {exit} found {print}' CHANGELOG.md > "$notes"
+          if ! grep -q '[^[:space:]]' "$notes"; then
+            echo "::error::CHANGELOG.md has no notes for $version"
+            exit 1
+          fi
+
+      - name: Upload release notes
+        if: github.ref_type == 'tag'
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-notes
+          path: ${{ runner.temp }}/release-notes.md
+          if-no-files-found: error
+
+  gui:
+    needs: version
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-24.04
+            name: Linux
+          - os: macos-latest
+            name: macOS
+          - os: windows-latest
+            name: Windows
+
+    runs-on: ${{ matrix.os }}
+    name: GUI (${{ matrix.name }})
+
+    steps:
+      - name: Enable long paths (Windows)
+        if: runner.os == 'Windows'
+        run: git config --system core.longpaths true
+
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+
+      - uses: pnpm/action-setup@8912a9102ac27614460f54aedde9e1e7f9aec20d # v6.0.5
+        with:
+          version: 11.8.0
+
+      - name: Install dependencies (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            pkg-config \
+            libxml2-dev \
+            libssl-dev \
+            libxerces-c-dev \
+            libasound2-dev \
+            libwebkit2gtk-4.1-dev \
+            libappindicator3-dev \
+            librsvg2-dev \
+            patchelf \
+            rpm \
+            libarchive-tools
+
+      - name: Install dependencies (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          brew install pkg-config libxml2 openssl@3 xerces-c
+          OPENSSL_PREFIX=$(brew --prefix openssl@3)
+          echo "OPENSSL_DIR=$OPENSSL_PREFIX" >> $GITHUB_ENV
+          echo "OPENSSL_LIB_DIR=$OPENSSL_PREFIX/lib" >> $GITHUB_ENV
+          echo "OPENSSL_INCLUDE_DIR=$OPENSSL_PREFIX/include" >> $GITHUB_ENV
+          echo "LIBRARY_PATH=$OPENSSL_PREFIX/lib:$(brew --prefix xerces-c)/lib" >> $GITHUB_ENV
+          echo "PKG_CONFIG_PATH=$OPENSSL_PREFIX/lib/pkgconfig:$(brew --prefix libxml2)/lib/pkgconfig:$(brew --prefix xerces-c)/lib/pkgconfig" >> $GITHUB_ENV
+
+      - name: Install dependencies (Windows)
+        if: runner.os == 'Windows'
+        run: |
+          $env:VCPKG_BUILD_TYPE="release"
+          # vcpkg reads curl 56 and 503 off github's archive host as permanent and
+          # refuses to retry the source download, so retry the whole install
+          for ($attempt = 1; $attempt -le 5; $attempt++) {
+            vcpkg install libxml2 openssl xerces-c --triplet x64-windows
+            if ($LASTEXITCODE -eq 0) { break }
+            if ($attempt -eq 5) { throw "vcpkg install failed after $attempt attempts" }
+            Start-Sleep -Seconds (30 * $attempt)
+          }
+          echo "VCPKG_ROOT=$env:VCPKG_INSTALLATION_ROOT" >> $env:GITHUB_ENV
+
+      - uses: PostPerfection/ffmpeg-mpv-builds@v1.0.0
+        with:
+          release: v1.0.0
+
+      - name: Setup grok
+        uses: PostPerfection/setup-grok@v1.1.3
+        with:
+          grok-ref: v20.4.16
+
+      - name: Install frontend dependencies
+        working-directory: gui
+        run: pnpm install --frozen-lockfile
+
+      # copies every dll the exe imports from outside System32, VC++ runtime included
+      - name: Stage grok, FFmpeg, libmpv and VC++ runtime dlls (Windows)
+        if: runner.os == 'Windows'
+        run: |
+          pnpm --dir gui build
+          cargo build --release --manifest-path gui/src-tauri/Cargo.toml
+          Copy-Item gui/src-tauri/target/release/dcpscreen-gui.exe gui/src-tauri/
+          ./scripts/stage-windows-dlls.ps1 -Binary gui/src-tauri/dcpscreen-gui.exe -SearchDirectories "$env:GITHUB_WORKSPACE/grok-install/bin", "$env:VCPKG_INSTALLATION_ROOT/installed/x64-windows/bin", "$env:FFMPEG_MPV_DIR/bin"
+          Remove-Item gui/src-tauri/dcpscreen-gui.exe
+          Copy-Item "$env:FFMPEG_MPV_DIR/THIRD-PARTY-LICENSES" "gui/src-tauri/THIRD-PARTY-LICENSES-ffmpeg-mpv.txt"
+          $dlls = @(Get-ChildItem gui/src-tauri/*.dll | ForEach-Object Name)
+          $dlls
+          # a tauri.windows.conf.json glob would fail every build that has no dlls staged
+          ConvertTo-Json @{ bundle = @{ resources = $dlls + "THIRD-PARTY-LICENSES-ffmpeg-mpv.txt" } } -Depth 3 | Set-Content "$env:RUNNER_TEMP/bundle-libraries.json"
+          Get-Content "$env:RUNNER_TEMP/bundle-libraries.json"
+
+      # the deb and rpm ship it through bundle.linux.*.files, the .app through bundle.macOS.frameworks
+      - name: Stage grok library (Unix)
+        if: runner.os != 'Windows'
+        shell: bash
+        run: |
+          set -euo pipefail
+          for candidate in "$GITHUB_WORKSPACE/grok-install/lib64" "$GITHUB_WORKSPACE/grok-install/lib"; do
+            if [ -d "$candidate" ]; then GROK_LIB="$candidate"; break; fi
+          done
+          if [ -z "${GROK_LIB:-}" ]; then
+            echo "no grok library directory under grok-install"
+            exit 1
+          fi
+          if [ "$RUNNER_OS" = "Linux" ]; then
+            library=libgrokj2k.so.1
+          else
+            library=libgrokj2k.1.dylib
+          fi
+          cp -L "$GROK_LIB/$library" "gui/src-tauri/$library"
+
+      # asdcplib links OpenSSL and Xerces-C from Homebrew as shared libraries
+      - name: Stage Homebrew libraries (macOS)
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          set -euo pipefail
+          pnpm --dir gui build
+          cargo build --release --manifest-path gui/src-tauri/Cargo.toml
+          staging="$GITHUB_WORKSPACE/gui/src-tauri/homebrew-libraries"
+          scripts/stage-macos-homebrew-libraries.sh gui/src-tauri/target/release/dcpscreen-gui "$staging"
+          ls -la "$staging"
+          echo "STAGED_HOMEBREW_LIBRARIES=$staging" >> "$GITHUB_ENV"
+
+      # adds the FFmpeg and libmpv libraries and their licence file to the deb, rpm and .app, and the Homebrew libraries to the .app
+      - name: Generate the FFmpeg and libmpv bundle config (Unix)
+        if: runner.os != 'Windows'
+        shell: bash
+        run: |
+          set -euo pipefail
+          scripts/ffmpeg-mpv-bundle-config.sh > "$RUNNER_TEMP/bundle-libraries.json"
+          jq . "$RUNNER_TEMP/bundle-libraries.json"
+
+      - name: Build Tauri app
+        uses: tauri-apps/tauri-action@v0
+        with:
+          projectPath: gui
+          args: --config ${{ runner.temp }}/bundle-libraries.json
+
+      - name: The installer carries its dlls (Windows)
+        if: runner.os == 'Windows'
+        run: |
+          $installer = Get-ChildItem "gui/src-tauri/target/release/bundle/nsis/*-setup.exe" | Select-Object -First 1
+          if ($null -eq $installer) { throw "NSIS installer not found" }
+          $install = Start-Process -FilePath $installer.FullName -ArgumentList "/S" -Wait -PassThru
+          if ($install.ExitCode -ne 0) { throw "Installer exited with $($install.ExitCode)" }
+          $entry = Get-ItemProperty "HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\*" |
+            Where-Object { $_.DisplayName -eq "DCP Screen" } |
+            Select-Object -First 1
+          if ($null -eq $entry) { throw "Installed application was not registered" }
+          $installDirectory = $entry.InstallLocation.Trim('"')
+          foreach ($dll in Get-ChildItem gui/src-tauri/*.dll) {
+            if (-not (Test-Path (Join-Path $installDirectory $dll.Name))) { throw "the installer does not carry $($dll.Name)" }
+          }
+          foreach ($file in "libmpv-2.dll", "avcodec-62.dll", "THIRD-PARTY-LICENSES-ffmpeg-mpv.txt") {
+            if (-not (Test-Path (Join-Path $installDirectory $file))) { throw "the installer does not carry $file" }
+          }
+          $env:PATH = @("$env:SystemRoot\System32", $installDirectory) -join [IO.Path]::PathSeparator
+          # a windows subsystem exe hands back no exit code under &
+          $packageDirectory = New-Item -ItemType Directory -Force -Path "$env:RUNNER_TEMP/no-package"
+          $verify = Start-Process -FilePath (Join-Path $installDirectory "dcpscreen-gui.exe") -ArgumentList "--verify-package", "`"$packageDirectory`"" -Wait -PassThru -NoNewWindow -RedirectStandardOutput "$env:RUNNER_TEMP/verify-package.json"
+          Get-Content "$env:RUNNER_TEMP/verify-package.json"
+          if ($verify.ExitCode -ne 0) { throw "the installed app exited with $($verify.ExitCode)" }
+
+      - name: The msi carries its dlls (Windows)
+        if: runner.os == 'Windows'
+        run: |
+          $nsisEntry = Get-ItemProperty "HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\*" |
+            Where-Object { $_.DisplayName -eq "DCP Screen" } |
+            Select-Object -First 1
+          if ($null -eq $nsisEntry) { throw "NSIS installer was not registered" }
+          $uninstall = Start-Process -FilePath $nsisEntry.UninstallString.Trim('"') -ArgumentList "/S" -Wait -PassThru
+          if ($uninstall.ExitCode -ne 0) { throw "NSIS uninstaller exited with $($uninstall.ExitCode)" }
+          # the NSIS uninstaller returns before it removes the entry
+          foreach ($attempt in 1..30) {
+            $nsisEntry = Get-ItemProperty "HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\*" |
+              Where-Object { $_.DisplayName -eq "DCP Screen" } |
+              Select-Object -First 1
+            if ($null -eq $nsisEntry) { break }
+            Start-Sleep -Seconds 1
+          }
+          if ($null -ne $nsisEntry) { throw "NSIS installer was still registered after uninstall" }
+          $installer = Get-ChildItem "gui/src-tauri/target/release/bundle/msi/*.msi" | Select-Object -First 1
+          if ($null -eq $installer) { throw "msi not found" }
+          $install = Start-Process -FilePath msiexec -ArgumentList "/i `"$($installer.FullName)`" /qn" -Wait -PassThru
+          if ($install.ExitCode -ne 0) { throw "msi exited with $($install.ExitCode)" }
+          $uninstallKeys = @(
+            "HKLM:\Software\Microsoft\Windows\CurrentVersion\Uninstall\*",
+            "HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\*"
+          )
+          $entry = Get-ItemProperty $uninstallKeys |
+            Where-Object { $_.DisplayName -eq "DCP Screen" } |
+            Select-Object -First 1
+          if ($null -eq $entry) { throw "Installed application was not registered" }
+          $installDirectory = "$($entry.InstallLocation)".Trim('"')
+          if ($installDirectory -eq "") { $installDirectory = Split-Path ($entry.DisplayIcon -replace ',\d+$', '').Trim('"') }
+          foreach ($dll in Get-ChildItem gui/src-tauri/*.dll) {
+            if (-not (Test-Path (Join-Path $installDirectory $dll.Name))) { throw "the msi does not carry $($dll.Name)" }
+          }
+          foreach ($file in "libmpv-2.dll", "avcodec-62.dll", "THIRD-PARTY-LICENSES-ffmpeg-mpv.txt") {
+            if (-not (Test-Path (Join-Path $installDirectory $file))) { throw "the msi does not carry $file" }
+          }
+          $env:PATH = @("$env:SystemRoot\System32", $installDirectory) -join [IO.Path]::PathSeparator
+          # a windows subsystem exe hands back no exit code under &
+          $packageDirectory = New-Item -ItemType Directory -Force -Path "$env:RUNNER_TEMP/no-package"
+          $verify = Start-Process -FilePath (Join-Path $installDirectory "dcpscreen-gui.exe") -ArgumentList "--verify-package", "`"$packageDirectory`"" -Wait -PassThru -NoNewWindow -RedirectStandardOutput "$env:RUNNER_TEMP/verify-package.json"
+          Get-Content "$env:RUNNER_TEMP/verify-package.json"
+          if ($verify.ExitCode -ne 0) { throw "the installed app exited with $($verify.ExitCode)" }
+          $uninstall = Start-Process -FilePath msiexec -ArgumentList "/x `"$($installer.FullName)`" /qn" -Wait -PassThru
+          if ($uninstall.ExitCode -ne 0) { throw "msi uninstall exited with $($uninstall.ExitCode)" }
+          $entry = Get-ItemProperty $uninstallKeys |
+            Where-Object { $_.DisplayName -eq "DCP Screen" } |
+            Select-Object -First 1
+          if ($null -ne $entry) { throw "msi was still registered after uninstall" }
+
+      # every check runs with the loader paths setup-grok and ffmpeg-mpv-builds exported unset
+      - name: The packages run without a grok or FFmpeg install (Linux)
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          set -euo pipefail
+          bundle=gui/src-tauri/target/release/bundle
+          bundled_libraries="libgrokj2k.so.1 libmpv.so.2 libavcodec.so.62"
+          licence=usr/share/doc/dcpscreen/THIRD-PARTY-LICENSES-ffmpeg-mpv.txt
+
+          check_binaries() {
+            for binary in "$@"; do
+              env -u LD_LIBRARY_PATH ldd "$binary"
+              if env -u LD_LIBRARY_PATH ldd "$binary" | grep -q "not found"; then
+                echo "$binary has an unresolved library"
+                exit 1
+              fi
+            done
+          }
+
+          ls -la "$bundle"/rpm "$bundle"/deb "$bundle"/appimage
+          rpm=$(find "$bundle/rpm" -name '*.rpm' ! -name '*.sig' -print -quit)
+          rpm -qpl "$rpm"
+          rpm -qpR "$rpm"
+          if ! rpm -qpR "$rpm" | grep -qxF 'libass.so.9()(64bit)'
+          then
+            echo "the rpm does not require libass.so.9()(64bit)"
+            exit 1
+          fi
+          if rpm -qpR "$rpm" | grep -F mpv-libs
+          then
+            echo "the rpm still requires mpv-libs"
+            exit 1
+          fi
+          rpm_paths=$(rpm -qpl "$rpm")
+          for path in $(printf '/usr/lib/dcpscreen/%s ' $bundled_libraries) "/$licence"
+          do
+            if ! echo "$rpm_paths" | grep -qxF "$path"
+            then
+              echo "rpm -qpl does not list $path"
+              exit 1
+            fi
+          done
+          rpm_root=$(mktemp -d)
+          bsdtar -xf "$rpm" -C "$rpm_root"
+          for path in $bundled_libraries
+          do
+            if [ ! -f "$rpm_root/usr/lib/dcpscreen/$path" ]
+            then
+              echo "the rpm does not carry usr/lib/dcpscreen/$path"
+              find "$rpm_root" -type f | sort
+              exit 1
+            fi
+          done
+          check_binaries "$rpm_root/usr/bin/dcpscreen-gui"
+          # --verify-package verifies the directory and exits before any window opens
+          env -u LD_LIBRARY_PATH "$rpm_root/usr/bin/dcpscreen-gui" --verify-package "$(mktemp -d)"
+
+          appimage=$(realpath "$(find "$bundle/appimage" -name '*.AppImage' -print -quit)")
+          appimage_root=$(mktemp -d)
+          (cd "$appimage_root" && "$appimage" --appimage-extract >/dev/null)
+          for path in $bundled_libraries
+          do
+            if [ ! -f "$appimage_root/squashfs-root/usr/lib/$path" ]
+            then
+              echo "the AppImage does not carry usr/lib/$path"
+              ls "$appimage_root/squashfs-root/usr/lib"
+              exit 1
+            fi
+          done
+          env -u LD_LIBRARY_PATH "$appimage_root/squashfs-root/usr/bin/dcpscreen-gui" --verify-package "$(mktemp -d)"
+
+          deb=$(realpath "$(find "$bundle/deb" -name '*.deb' -print -quit)")
+          depends=$(dpkg-deb -f "$deb" Depends)
+          echo "$depends"
+          if echo "$depends" | grep -F libmpv2
+          then
+            echo "the deb still depends on libmpv2"
+            exit 1
+          fi
+          if ! echo "$depends" | grep -qF libass9
+          then
+            echo "the deb does not depend on libass9"
+            exit 1
+          fi
+          dpkg-deb -c "$deb"
+          deb_paths=$(dpkg-deb -c "$deb" | awk '{print $NF}' | sed 's|^\./||')
+          for path in $(printf 'usr/lib/dcpscreen/%s ' $bundled_libraries) "$licence"
+          do
+            if ! echo "$deb_paths" | grep -qxF "$path"
+            then
+              echo "the deb does not carry $path"
+              exit 1
+            fi
+          done
+          sudo apt-get install -y "$deb"
+          check_binaries /usr/bin/dcpscreen-gui
+          for library in libmpv.so.2 libavcodec.so.62
+          do
+            env -u LD_LIBRARY_PATH ldd /usr/bin/dcpscreen-gui | grep -F "$library => /usr/bin/../lib/dcpscreen/$library"
+          done
+          env -u LD_LIBRARY_PATH dcpscreen-gui --verify-package "$(mktemp -d)"
+
+      # the bundler rewrites no load command, a missed relink shows up as a runner path
+      - name: The app runs without a grok or FFmpeg install (macOS)
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          set -euo pipefail
+          ls -la gui/src-tauri/target/release/bundle/macos
+          app=$(find gui/src-tauri/target/release/bundle/macos -maxdepth 1 -name '*.app' -print -quit)
+          if [ -z "$app" ]; then
+            echo "no .app under gui/src-tauri/target/release/bundle/macos"
+            exit 1
+          fi
+          for path in Frameworks/libgrokj2k.1.dylib Frameworks/libmpv.2.dylib Frameworks/libavcodec.62.dylib Resources/THIRD-PARTY-LICENSES-ffmpeg-mpv.txt
+          do
+            if [ ! -f "$app/Contents/$path" ]
+            then
+              echo "the app does not carry Contents/$path"
+              find "$app" -type f | sort
+              exit 1
+            fi
+          done
+          for binary in "$app/Contents/MacOS/dcpscreen-gui" "$app"/Contents/Frameworks/*.dylib
+          do
+            otool -L "$binary"
+            if otool -L "$binary" | grep -E "/Users/runner|/opt/homebrew|/usr/local"
+            then
+              echo "$binary loads a library from the build tree or Homebrew"
+              exit 1
+            fi
+          done
+          # --verify-package verifies the directory and exits before any window opens
+          env -u DYLD_LIBRARY_PATH -u DYLD_FALLBACK_LIBRARY_PATH "$app/Contents/MacOS/dcpscreen-gui" --verify-package "$(mktemp -d)"
+          # a missing dylib kills the gui at exec, so it has to be alive a few seconds later
+          env -u DYLD_LIBRARY_PATH -u DYLD_FALLBACK_LIBRARY_PATH "$app/Contents/MacOS/dcpscreen-gui" &
+          gui_pid=$!
+          sleep 8
+          kill -0 "$gui_pid"
+          kill "$gui_pid"
+
+      - name: Upload the bundles
+        uses: actions/upload-artifact@v4
+        with:
+          name: dcpscreen-${{ matrix.name }}
+          path: |
+            gui/src-tauri/target/release/bundle/appimage/*.AppImage
+            gui/src-tauri/target/release/bundle/deb/*.deb
+            gui/src-tauri/target/release/bundle/rpm/*.rpm
+            gui/src-tauri/target/release/bundle/dmg/*.dmg
+            gui/src-tauri/target/release/bundle/nsis/*-setup.exe
+            gui/src-tauri/target/release/bundle/msi/*.msi
+          if-no-files-found: error
+
+  release:
+    if: github.ref_type == 'tag'
+    needs: [gui]
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - name: Download tested packages
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Create GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: DCP Screen ${{ github.ref_name }}
+          body_path: artifacts/release-notes/release-notes.md
+          fail_on_unmatched_files: true
+          files: |
+            artifacts/**/*.deb
+            artifacts/**/*.rpm
+            artifacts/**/*.AppImage
+            artifacts/**/*.dmg
+            artifacts/**/*.msi
+            artifacts/**/*-setup.exe

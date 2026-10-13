@@ -1,0 +1,5 @@
+{
+  "build": {
+    "beforeBundleCommand": "bash ../scripts/relink-macos-grok.sh"
+  }
+}

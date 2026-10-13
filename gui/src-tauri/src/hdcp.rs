@@ -1,6 +1,5 @@
 use crate::play::PlaySource;
 use crate::settings::{settings_path, Settings};
-use serde::Serialize;
 use std::collections::HashSet;
 use std::sync::Mutex;
 use std::time::Duration;
@@ -9,15 +8,18 @@ use tauri::{Emitter, Manager};
 const RECHECK_INTERVAL: Duration = Duration::from_secs(2);
 // the main page stops playback and says why when it hears this
 const HDCP_STOPPED_EVENT: &str = "hdcp-stopped";
+#[cfg(target_os = "linux")]
 const NOTHING_TURNS_HDCP_ON: &str = "On GNOME or KDE nothing turns HDCP on";
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[cfg(target_os = "linux")]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
 pub enum ContentProtection {
     Undesired,
     Desired,
     Enabled,
 }
 
+#[cfg(target_os = "linux")]
 impl ContentProtection {
     pub fn from_property_name(name: &str) -> Option<ContentProtection> {
         match name {
@@ -29,6 +31,7 @@ impl ContentProtection {
     }
 }
 
+#[cfg(target_os = "linux")]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct OutputProtection {
     // the connector name, such as DP-9
@@ -37,6 +40,7 @@ pub struct OutputProtection {
     pub protection: Option<ContentProtection>,
 }
 
+#[cfg(target_os = "linux")]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum OutputReading {
     NotFound { monitor: Option<String> },
@@ -50,6 +54,7 @@ pub enum Verdict {
     Refuse(String),
 }
 
+#[cfg(target_os = "linux")]
 fn refusal(reason: String) -> Verdict {
     Verdict::Refuse(format!(
         "HDCP is required for encrypted content, and {reason}"
@@ -57,6 +62,7 @@ fn refusal(reason: String) -> Verdict {
 }
 
 // unencrypted content and the setting off never read the output
+#[cfg(target_os = "linux")]
 pub fn verdict(
     require_hdcp: bool,
     encrypted: bool,
@@ -114,11 +120,6 @@ pub fn supported() -> bool {
     cfg!(target_os = "linux")
 }
 
-// the setting never blocks playback where the output cannot be read
-fn required(settings: &Settings) -> bool {
-    settings.require_hdcp && supported()
-}
-
 #[tauri::command]
 pub fn hdcp_supported() -> bool {
     supported()
@@ -136,10 +137,17 @@ fn player_output_reading(app: &tauri::AppHandle) -> OutputReading {
     drm_outputs::reading_for_monitor(&monitor)
 }
 
+#[cfg(target_os = "linux")]
+fn output_verdict(app: &tauri::AppHandle, settings: &Settings, encrypted: bool) -> Verdict {
+    verdict(settings.require_hdcp, encrypted, || {
+        player_output_reading(app)
+    })
+}
+
+// the setting never blocks playback where the output cannot be read
 #[cfg(not(target_os = "linux"))]
-fn player_output_reading(_app: &tauri::AppHandle) -> OutputReading {
-    // never read, required() is false off Linux
-    OutputReading::NotFound { monitor: None }
+fn output_verdict(_app: &tauri::AppHandle, _settings: &Settings, _encrypted: bool) -> Verdict {
+    Verdict::Play
 }
 
 // refuses an encrypted source the output may not show, and remembers it for the recheck
@@ -156,9 +164,7 @@ pub fn admit(
     else {
         return Ok(());
     };
-    if let Verdict::Refuse(message) =
-        verdict(required(settings), true, || player_output_reading(app))
-    {
+    if let Verdict::Refuse(message) = output_verdict(app, settings, true) {
         return Err(message);
     }
     app.state::<EncryptedSources>()
@@ -181,9 +187,7 @@ fn recheck(app: &tauri::AppHandle) -> Verdict {
         Err(error) => return Verdict::Refuse(format!("the settings do not read: {error}")),
     };
     let encrypted = app.state::<EncryptedSources>().contains(&source);
-    verdict(required(&settings), encrypted, || {
-        player_output_reading(app)
-    })
+    output_verdict(app, &settings, encrypted)
 }
 
 fn stop_encrypted_playback(app: &tauri::AppHandle, message: String) {
@@ -391,7 +395,8 @@ pub mod drm_outputs {
     }
 }
 
-#[cfg(test)]
+// the output checks read DRM connectors, which only Linux has
+#[cfg(all(test, target_os = "linux"))]
 mod tests {
     use super::*;
 
@@ -457,7 +462,6 @@ mod tests {
         );
     }
 
-    #[cfg(target_os = "linux")]
     mod drm_connector_tests {
         use super::super::drm_outputs::*;
         use super::super::ContentProtection;

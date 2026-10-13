@@ -301,14 +301,19 @@ mod tests {
         assert!(output.is_none());
         let stopped_after = cancel_at.lock().unwrap().unwrap().elapsed();
         assert!(stopped_after < Duration::from_secs(1), "{stopped_after:?}");
-        let started_pid = std::fs::read_to_string(&started_pid_file).unwrap();
-        let started_process = PathBuf::from(format!("/proc/{}", started_pid.trim()));
+        let started_pid: i32 = std::fs::read_to_string(&started_pid_file)
+            .unwrap()
+            .trim()
+            .parse()
+            .unwrap();
+        // macOS has no /proc to look in
+        let started_process_exists = || unsafe { libc::kill(started_pid, 0) } == 0;
         let deadline = std::time::Instant::now() + Duration::from_secs(1);
-        while started_process.exists() && std::time::Instant::now() < deadline {
+        while started_process_exists() && std::time::Instant::now() < deadline {
             std::thread::sleep(CANCEL_POLL_INTERVAL);
         }
         assert!(
-            !started_process.exists(),
+            !started_process_exists(),
             "the sleep the job started still runs"
         );
     }

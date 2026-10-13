@@ -2,3 +2,8 @@ target/
 node_modules/
 dist/
 gui/src-tauri/gen/
+gui/src-tauri/libgrokj2k.so.1
+gui/src-tauri/libgrokj2k.1.dylib
+gui/src-tauri/homebrew-libraries/
+gui/src-tauri/*.dll
+gui/src-tauri/THIRD-PARTY-LICENSES-ffmpeg-mpv.txt

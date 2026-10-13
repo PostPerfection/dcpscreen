@@ -1,0 +1,27 @@
+{
+  "app": {
+    "windows": []
+  },
+  "bundle": {
+    "linux": {
+      "deb": {
+        "depends": [
+          "libssl3t64",
+          "libcurl4t64"
+        ],
+        "files": {
+          "/usr/lib/dcpscreen/libgrokj2k.so.1": "libgrokj2k.so.1"
+        }
+      },
+      "rpm": {
+        "depends": [
+          "libcrypto.so.3()(64bit)",
+          "libcurl.so.4()(64bit)"
+        ],
+        "files": {
+          "/usr/lib/dcpscreen/libgrokj2k.so.1": "libgrokj2k.so.1"
+        }
+      }
+    }
+  }
+}

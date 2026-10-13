@@ -8,8 +8,17 @@ on:
 
 jobs:
   gui:
-    runs-on: ubuntu-24.04
+    name: GUI ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, macos-latest, windows-latest]
     steps:
+      - name: Enable long paths (Windows)
+        if: runner.os == 'Windows'
+        run: git config --system core.longpaths true
+
       - uses: actions/checkout@v4
         with:
           submodules: recursive
@@ -26,10 +35,39 @@ jobs:
           cache: pnpm
           cache-dependency-path: gui/pnpm-lock.yaml
 
-      - name: Install dependencies
+      - name: Install dependencies (Linux)
+        if: runner.os == 'Linux'
         run: |
           sudo apt-get update
           sudo apt-get install -y pkg-config libxml2-dev libssl-dev libxerces-c-dev libasound2-dev libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev libxml2-utils
+
+      - name: Install dependencies (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          brew install pkg-config libxml2 openssl@3 xerces-c
+          OPENSSL_PREFIX=$(brew --prefix openssl@3)
+          echo "OPENSSL_DIR=$OPENSSL_PREFIX" >> $GITHUB_ENV
+          echo "OPENSSL_LIB_DIR=$OPENSSL_PREFIX/lib" >> $GITHUB_ENV
+          echo "OPENSSL_INCLUDE_DIR=$OPENSSL_PREFIX/include" >> $GITHUB_ENV
+          echo "LIBRARY_PATH=$OPENSSL_PREFIX/lib:$(brew --prefix xerces-c)/lib" >> $GITHUB_ENV
+          echo "PKG_CONFIG_PATH=$OPENSSL_PREFIX/lib/pkgconfig:$(brew --prefix libxml2)/lib/pkgconfig:$(brew --prefix xerces-c)/lib/pkgconfig" >> $GITHUB_ENV
+
+      - name: Install dependencies (Windows)
+        if: runner.os == 'Windows'
+        run: |
+          $env:VCPKG_BUILD_TYPE="release"
+          # vcpkg reads curl 56 and 503 off github's archive host as permanent and
+          # refuses to retry the source download, so retry the whole install
+          for ($attempt = 1; $attempt -le 5; $attempt++) {
+            vcpkg install libxml2[tools] openssl xerces-c --triplet x64-windows
+            if ($LASTEXITCODE -eq 0) { break }
+            if ($attempt -eq 5) { throw "vcpkg install failed after $attempt attempts" }
+            Start-Sleep -Seconds (30 * $attempt)
+          }
+          echo "VCPKG_ROOT=$env:VCPKG_INSTALLATION_ROOT" >> $env:GITHUB_ENV
+          echo "$env:VCPKG_INSTALLATION_ROOT\installed\x64-windows\tools\libxml2" >> $env:GITHUB_PATH
+          # ahead of the runner's other openssl dlls, which lack the exports vcpkg's link against
+          echo "$env:VCPKG_INSTALLATION_ROOT\installed\x64-windows\bin" >> $env:GITHUB_PATH
 
       - uses: PostPerfection/ffmpeg-mpv-builds@v1.0.0
         with:
@@ -69,3 +107,18 @@ jobs:
         # without custom-protocol tauri builds a dev binary that loads the vite
         # dev url instead of the embedded frontend, tauri build turns it on
         run: cargo build --release --manifest-path gui/src-tauri/Cargo.toml --features tauri/custom-protocol
+
+  deny:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: taiki-e/install-action@cargo-deny
+
+      - name: Cargo deny
+        working-directory: gui/src-tauri
+        run: cargo deny check bans licenses sources
