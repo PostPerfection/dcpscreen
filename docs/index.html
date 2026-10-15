@@ -328,17 +328,27 @@
 
 <section class="section" id="download">
     <h2 class="section-title">Get DCP Screen</h2>
-    <p class="section-subtitle">There is no release yet. Builds for Windows, macOS and Linux are coming, and will be on the GitHub releases page.</p>
+    <p class="section-subtitle">Add the folders your packages are in, add the KDMs for encrypted compositions, and play.</p>
 
     <div class="download-grid">
         <div class="download-card">
-            <h3>Source</h3>
-            <p class="files">Build it yourself on Linux</p>
-            <a href="https://github.com/PostPerfection/dcpscreen" class="btn btn-primary">View on GitHub</a>
+            <h3>Windows</h3>
+            <p class="files">Installer <code>.exe</code> / <code>.msi</code>, x86_64</p>
+            <a href="https://github.com/PostPerfection/dcpscreen/releases/latest" class="btn btn-primary">Download latest</a>
+        </div>
+        <div class="download-card">
+            <h3>macOS</h3>
+            <p class="files"><code>.dmg</code>, Apple Silicon</p>
+            <a href="https://github.com/PostPerfection/dcpscreen/releases/latest" class="btn btn-primary">Download latest</a>
+        </div>
+        <div class="download-card">
+            <h3>Linux</h3>
+            <p class="files"><code>.AppImage</code> / <code>.deb</code> / <code>.rpm</code>, x86_64</p>
+            <a href="https://github.com/PostPerfection/dcpscreen/releases/latest" class="btn btn-primary">Download latest</a>
         </div>
     </div>
 
-    <p class="download-note">Building from source needs Grok, FFmpeg and libmpv where pkg-config can find them. The README has the steps.</p>
+    <p class="download-note">The macOS app is not notarized, so the first time it is blocked, open System Settings, Privacy &amp; Security, and choose Open Anyway. Make the AppImage executable with <code>chmod +x</code> before running it. The Windows installers are unsigned, so if SmartScreen stops one, choose More info, then Run anyway.</p>
     <p class="download-note"><strong>Free and open source</strong> under the AGPL. No licence key, no seat limits, no subscription.</p>
 </section>
 
