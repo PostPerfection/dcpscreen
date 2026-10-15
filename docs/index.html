@@ -1,0 +1,472 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DCP Screen: Play DCPs and IMPs from a Library</title>
+    <meta name="description" content="DCP Screen is a desktop player for DCPs and IMF packages. Keep packages in a library of folders, play encrypted compositions with KDMs from a store, run playlists, and verify packages with DCP Doctor. Free and open source.">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&amp;family=JetBrains+Mono:wght@400;500&amp;display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-primary: #0D0D0D;
+            --bg-secondary: #141414;
+            --bg-tertiary: #1A1A1A;
+            --bg-card: #1E1E1E;
+            --bg-card-hover: #252525;
+            --border: #2A2A2A;
+            --border-hover: #3A3A3A;
+            --accent: #A78BFA;
+            --accent-dim: rgba(167, 139, 250, 0.15);
+            --accent-glow: rgba(167, 139, 250, 0.3);
+            --blue: #38BDF8;
+            --cyan: #22D3EE;
+            --amber: #FBBF24;
+            --rose: #FB7185;
+            --green: #4ADE80;
+            --text-primary: #FFFFFF;
+            --text-secondary: #A1A1AA;
+            --text-tertiary: #71717A;
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        html { scroll-behavior: smooth; }
+
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-secondary);
+            line-height: 1.6;
+            -webkit-font-smoothing: antialiased;
+        }
+
+        nav {
+            position: fixed;
+            top: 0; left: 0; right: 0;
+            z-index: 1000;
+            background: rgba(13, 13, 13, 0.8);
+            backdrop-filter: blur(20px);
+            border-bottom: 1px solid var(--border);
+        }
+        .nav-inner {
+            max-width: 1280px;
+            margin: 0 auto;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0 32px;
+            height: 64px;
+        }
+        .nav-logo {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            text-decoration: none;
+            color: var(--text-primary);
+            font-weight: 700;
+            font-size: 1.15rem;
+        }
+        .nav-logo svg { width: 24px; height: 24px; }
+        .nav-links {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            list-style: none;
+        }
+        .nav-links a {
+            color: var(--text-secondary);
+            text-decoration: none;
+            font-size: 0.875rem;
+            font-weight: 500;
+            padding: 8px 14px;
+            border-radius: 8px;
+            transition: all 0.15s;
+        }
+        .nav-links a:hover { color: var(--text-primary); background: var(--bg-tertiary); }
+
+        .hero {
+            padding: 160px 32px 100px;
+            text-align: center;
+            position: relative;
+            overflow: hidden;
+        }
+        .hero::before {
+            content: '';
+            position: absolute;
+            top: -50%;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 800px;
+            height: 800px;
+            background: radial-gradient(circle, var(--accent-dim) 0%, transparent 70%);
+            pointer-events: none;
+        }
+        .hero h1 {
+            font-size: clamp(2.5rem, 6vw, 4.5rem);
+            font-weight: 900;
+            color: var(--text-primary);
+            line-height: 1.1;
+            margin-bottom: 1.5rem;
+        }
+        .hero h1 span {
+            background: linear-gradient(135deg, var(--accent), var(--cyan));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        .hero p {
+            font-size: 1.2rem;
+            max-width: 650px;
+            margin: 0 auto 2.5rem;
+            color: var(--text-secondary);
+        }
+        .hero-buttons {
+            display: flex;
+            gap: 12px;
+            justify-content: center;
+            flex-wrap: wrap;
+        }
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 12px 24px;
+            border-radius: 10px;
+            font-size: 0.95rem;
+            font-weight: 600;
+            text-decoration: none;
+            transition: all 0.15s;
+        }
+        .btn-primary {
+            background: linear-gradient(135deg, #7C3AED, var(--accent));
+            color: white;
+        }
+        .btn-primary:hover { transform: translateY(-2px); box-shadow: 0 8px 24px var(--accent-glow); }
+        .btn-secondary {
+            background: var(--bg-card);
+            color: var(--text-primary);
+            border: 1px solid var(--border);
+        }
+        .btn-secondary:hover { border-color: var(--border-hover); background: var(--bg-card-hover); }
+        .btn-lg { padding: 16px 32px; font-size: 1.05rem; }
+
+        .section {
+            max-width: 1280px;
+            margin: 0 auto;
+            padding: 80px 32px;
+        }
+        .section-title {
+            font-size: 2rem;
+            font-weight: 800;
+            color: var(--text-primary);
+            margin-bottom: 1rem;
+        }
+        .section-subtitle {
+            color: var(--text-secondary);
+            font-size: 1.1rem;
+            margin-bottom: 3rem;
+            max-width: 620px;
+        }
+        .group-title {
+            color: var(--text-primary);
+            font-size: 1.3rem;
+            font-weight: 700;
+            margin: 2.5rem 0 1.25rem;
+        }
+        .group-title:first-of-type { margin-top: 0; }
+
+        .features-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 20px;
+        }
+        .feature-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 28px;
+            transition: all 0.2s;
+        }
+        .feature-card:hover {
+            border-color: var(--border-hover);
+            background: var(--bg-card-hover);
+            transform: translateY(-2px);
+        }
+        .feature-card h3 {
+            color: var(--text-primary);
+            font-size: 1.05rem;
+            font-weight: 600;
+            margin-bottom: 8px;
+        }
+        .feature-card p {
+            color: var(--text-tertiary);
+            font-size: 0.9rem;
+            line-height: 1.5;
+        }
+
+        .download-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 20px;
+            margin-top: 2rem;
+        }
+        .download-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 28px;
+            text-align: center;
+            transition: all 0.2s;
+        }
+        .download-card:hover { border-color: var(--border-hover); background: var(--bg-card-hover); }
+        .download-card h3 { color: var(--text-primary); font-size: 1.1rem; font-weight: 700; margin-bottom: 6px; }
+        .download-card .files { color: var(--text-tertiary); font-size: 0.85rem; margin-bottom: 18px; }
+        .download-card .files code {
+            font-family: 'JetBrains Mono', monospace;
+            color: var(--cyan);
+            font-size: 0.8rem;
+        }
+        .download-card .btn { width: 100%; justify-content: center; }
+        .download-note {
+            margin-top: 2rem;
+            color: var(--text-tertiary);
+            font-size: 0.9rem;
+        }
+        .download-note strong { color: var(--green); }
+        .download-note a, .install-step a, .section-subtitle a { color: var(--accent); text-decoration: none; }
+
+        .install-steps {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 20px;
+            margin-top: 2rem;
+        }
+        .install-step {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            padding: 24px;
+        }
+        .install-step .step-num {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 28px;
+            height: 28px;
+            border-radius: 50%;
+            background: var(--accent-dim);
+            color: var(--accent);
+            font-size: 0.85rem;
+            font-weight: 700;
+            margin-bottom: 12px;
+        }
+        .install-step h4 {
+            color: var(--text-primary);
+            font-size: 1rem;
+            margin-bottom: 8px;
+        }
+        .install-step p {
+            color: var(--text-tertiary);
+            font-size: 0.85rem;
+        }
+        .install-step code {
+            font-family: 'JetBrains Mono', monospace;
+            background: var(--bg-primary);
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-size: 0.8rem;
+            color: var(--cyan);
+            overflow-wrap: anywhere;
+        }
+
+        footer {
+            border-top: 1px solid var(--border);
+            padding: 40px 32px;
+            text-align: center;
+            color: var(--text-tertiary);
+            font-size: 0.85rem;
+        }
+        footer a { color: var(--accent); text-decoration: none; }
+
+        @media (max-width: 768px) {
+            .nav-links { display: none; }
+            .hero { padding: 120px 20px 60px; }
+            .section { padding: 60px 20px; }
+        }
+    </style>
+</head>
+<body>
+
+<nav>
+    <div class="nav-inner">
+        <a href="#" class="nav-logo">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <rect x="2" y="4" width="20" height="14" rx="2"/>
+                <path d="M10 8l5 3-5 3z"/>
+                <path d="M8 21h8"/>
+            </svg>
+            DCP Screen
+        </a>
+        <ul class="nav-links">
+            <li><a href="https://postperfection.github.io/">Suite</a></li>
+            <li><a href="#download">Download</a></li>
+            <li><a href="#features">Features</a></li>
+            <li><a href="#developers">Developers</a></li>
+            <li><a href="https://github.com/PostPerfection/dcpscreen">GitHub</a></li>
+        </ul>
+    </div>
+</nav>
+
+<section class="hero">
+    <h1>Play DCPs and IMPs<br><span>from your own library</span></h1>
+    <p>DCP Screen plays DCPs and IMF packages from a library of folders. It picks the KDM for an encrypted composition from a store of KDMs, runs playlists with intermissions and start times, shows subtitles and captions, and verifies packages with DCP Doctor.</p>
+    <div class="hero-buttons">
+        <a href="#download" class="btn btn-primary btn-lg">Get DCP Screen</a>
+        <a href="#features" class="btn btn-secondary btn-lg">See what it does</a>
+    </div>
+</section>
+
+<section class="section" id="download">
+    <h2 class="section-title">Get DCP Screen</h2>
+    <p class="section-subtitle">There is no release yet. Builds for Windows, macOS and Linux are coming, and will be on the GitHub releases page.</p>
+
+    <div class="download-grid">
+        <div class="download-card">
+            <h3>Source</h3>
+            <p class="files">Build it yourself on Linux</p>
+            <a href="https://github.com/PostPerfection/dcpscreen" class="btn btn-primary">View on GitHub</a>
+        </div>
+    </div>
+
+    <p class="download-note">Building from source needs Grok, FFmpeg and libmpv where pkg-config can find them. The README has the steps.</p>
+    <p class="download-note"><strong>Free and open source</strong> under the AGPL. No licence key, no seat limits, no subscription.</p>
+</section>
+
+<section class="section" id="features">
+    <h2 class="section-title">From the library to the screen</h2>
+    <p class="section-subtitle">Grouped by the job in front of you, from the folders your packages are in to the picture on the screen.</p>
+
+    <h3 class="group-title">Library and keys</h3>
+    <div class="features-grid">
+        <div class="feature-card">
+            <h3>A library of folders</h3>
+            <p>Add the folders your packages are in. DCP Screen finds the DCPs and IMF packages under them at startup and on Refresh, and lists each composition with its standard, length and whether it is encrypted.</p>
+        </div>
+        <div class="feature-card">
+            <h3>A store of KDMs</h3>
+            <p>Add KDM puts a KDM in the store. The Keys view lists each one with its title, composition and validity window, and says whether it is valid now, not yet valid, expired or made for another certificate. Settings holds the certificate and private key the KDMs are made for.</p>
+        </div>
+        <div class="feature-card">
+            <h3>The right KDM at play time</h3>
+            <p>An encrypted composition plays with the KDM from the store that is valid now. In a playlist, the KDM is picked when the row loads.</p>
+        </div>
+        <div class="feature-card">
+            <h3>Verify with DCP Doctor</h3>
+            <p>Verify runs DCP Doctor's strict check on a DCP, or its IMF checks on an IMP, as a job in a process of its own. Cancel or quitting the app stops it at once. The library shows each package's result and its error count.</p>
+        </div>
+        <div class="feature-card">
+            <h3>Version files and supplemental IMPs</h3>
+            <p>A version file plays with the reels and sound it takes from its original version in the library. A supplemental IMP takes the picture and sound it lacks the same way. When the original version is missing, the play is refused, naming the assets no package holds.</p>
+        </div>
+    </div>
+
+    <h3 class="group-title">The player</h3>
+    <div class="features-grid">
+        <div class="feature-card">
+            <h3>A window of its own</h3>
+            <p>Play opens the player as a normal window, and the library stays on the main window. F, a double click or the full screen button go full screen on the display chosen in Settings. Escape leaves full screen.</p>
+        </div>
+        <div class="feature-card">
+            <h3>Controls on mouse-over</h3>
+            <p>Moving the pointer over the picture shows play and pause, the scrubber with the time, Stop and full screen. They fade out while playing and stay while paused. Space pauses, and Stop or closing the window ends playback.</p>
+        </div>
+        <div class="feature-card">
+            <h3>Subtitles and captions</h3>
+            <p>SMPTE timed text, encrypted ones included, and Interop text or PNG subtitles show over the picture, closed captions too. A Subtitles button names the language and hides or shows them. A Language button switches languages when a track has several. An IMP's IMSC subtitles do not show yet.</p>
+        </div>
+        <div class="feature-card">
+            <h3>IMF packages</h3>
+            <p>An IMP lists each composition with its application and the colour primaries and transfer its picture signals. It plays with its first audio track through the App 2E colour path. An encrypted IMP picture plays with a KDM from the store.</p>
+        </div>
+        <div class="feature-card">
+            <h3>Stereoscopic 3D</h3>
+            <p>A 3D DCP plays as the left eye, the right eye, side by side, or top and bottom, as set in Settings. While it plays, clicking the output in the controls steps to the next one.</p>
+        </div>
+        <div class="feature-card">
+            <h3>Picture and sound settings</h3>
+            <p>Brightness, masks on each edge, scaling (fit, fill or native), the sound device and layout, an A/V delay, a subtitle offset and a subtitle colour. A change applies to a composition already playing.</p>
+        </div>
+        <div class="feature-card">
+            <h3>Monitor profile</h3>
+            <p>DCP pictures are shown through an ICC display profile, picked as a file or, on Linux, from the profiles colord has for the full screen display. Without one, the player shows sRGB.</p>
+        </div>
+        <div class="feature-card">
+            <h3>Decode resolution</h3>
+            <p>The CPU decodes JPEG 2000 at full, half or quarter resolution. Automatic starts each composition at full and steps down one scale when the frame rate stays under the composition's rate for 3 seconds. The optional Grok GPU accelerator, a commercial plugin, decodes on the GPU at full resolution.</p>
+        </div>
+    </div>
+
+    <h3 class="group-title">Playlists</h3>
+    <div class="features-grid">
+        <div class="feature-card">
+            <h3>Compositions and intermissions</h3>
+            <p>A playlist runs compositions and intermissions in order. One composition follows another with no black frame between them. An intermission holds black or a still image for its length. Each row shows when it is expected to start.</p>
+        </div>
+        <div class="feature-card">
+            <h3>In and out points</h3>
+            <p>A composition row can play part of its composition, from its In timecode to the frame before its Out timecode. Type the timecode, or set it from the frame on screen while the row plays.</p>
+        </div>
+        <div class="feature-card">
+            <h3>Start times</h3>
+            <p>A row with a start time waits on black until that local time. When the row before runs past it, the row starts late and the Playlist view shows a warning. A composition that cannot play is skipped, with the reason on the Playlist view.</p>
+        </div>
+    </div>
+
+    <h3 class="group-title">In the booth</h3>
+    <div class="features-grid">
+        <div class="feature-card">
+            <h3>Settings lock</h3>
+            <p>A password of at least 8 characters locks the settings, the library folders and the KDM store. Playing, verifying and playlists stay open. A wrong password holds off the next try for 5 seconds. The lock does not stop anyone who can edit the user's files.</p>
+        </div>
+        <div class="feature-card">
+            <h3>HDCP check</h3>
+            <p>On Linux, "Require HDCP for encrypted content" plays an encrypted composition only when the output the player window is on reads Content Protection Enabled, and stops within 2 seconds of it leaving Enabled. GNOME and KDE never turn HDCP on, so on those desktops the setting blocks every encrypted composition.</p>
+        </div>
+    </div>
+</section>
+
+<section class="section" id="developers">
+    <h2 class="section-title">For developers</h2>
+    <p class="section-subtitle">DCP Screen is a Tauri app over <a href="https://github.com/PostPerfection/postkit">postkit</a> and <a href="https://github.com/PostPerfection/guikit">guikit</a>. Contributions welcome.</p>
+
+    <div class="install-steps">
+        <div class="install-step">
+            <div class="step-num">1</div>
+            <h4>Clone</h4>
+            <p><code>git clone --recurse-submodules https://github.com/PostPerfection/dcpscreen.git</code></p>
+        </div>
+        <div class="install-step">
+            <div class="step-num">2</div>
+            <h4>Run the desktop app</h4>
+            <p><code>cd dcpscreen/gui &amp;&amp; pnpm install &amp;&amp; pnpm tauri dev</code></p>
+            <p>Grok, FFmpeg and libmpv must be found by pkg-config at build time. Linux only for now.</p>
+        </div>
+        <div class="install-step">
+            <div class="step-num">3</div>
+            <h4>Built on postkit and guikit</h4>
+            <p>The package library, KDM store, playlist timing and JPEG 2000 player are in <a href="https://github.com/PostPerfection/postkit">postkit</a>. The player window is from <a href="https://github.com/PostPerfection/guikit">guikit</a>, shared with DCP Wizard and IMF Wizard.</p>
+        </div>
+        <div class="install-step">
+            <div class="step-num">4</div>
+            <h4>Source and issues</h4>
+            <p>Build notes, tests and the AGPL-3.0 licence on <a href="https://github.com/PostPerfection/dcpscreen">GitHub</a>.</p>
+        </div>
+    </div>
+</section>
+
+<footer>
+    <p>&copy; 2026 Grok Image Compression Inc. &middot; Licensed under the <a href="https://www.gnu.org/licenses/agpl-3.0.html">GNU AGPL-3.0</a>. Part of the <a href="https://postperfection.github.io/">PostPerfection</a> suite.</p>
+</footer>
+
+</body>
+</html>
