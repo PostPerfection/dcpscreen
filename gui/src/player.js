@@ -5,8 +5,10 @@ import {
   initFullPageSurface,
   initLiveTransport,
   previewPlayPause,
+  watchPreviewAudioLevels,
   watchPreviewMetadata,
 } from "../../extern/guikit/src/preview.js";
+import { createLevelMeter } from "../../extern/guikit/src/level-meter.js";
 import { fullscreenMonitor } from "./player-monitor.js";
 import { holdCountdownText, playlistHudText } from "./screening-playlist.js";
 import { nextStereoMode, stereoHudText } from "./stereo-output.js";
@@ -256,5 +258,6 @@ async function showPlaylistState() {
 }
 
 setInterval(() => showPlaylistState().catch(reportFailure), PLAYLIST_POLL_INTERVAL_MS);
+watchPreviewAudioLevels(createLevelMeter(document.getElementById("player-level-meter")));
 initFullPageSurface();
 initLiveTransport();

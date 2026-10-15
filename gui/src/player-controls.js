@@ -22,6 +22,7 @@ export function playerControlsFromFields({
   subtitleColour,
   displayProfile,
   stereo,
+  levelMeter,
   cpuDecodeResolution,
 }) {
   return {
@@ -46,6 +47,7 @@ export function playerControlsFromFields({
     },
     playerDisplayProfile: displayProfile || null,
     playerStereo: stereo,
+    playerLevelMeter: levelMeter,
     cpuDecodeResolution,
   };
 }
@@ -79,6 +81,9 @@ export function playerControlCommands(applied, settings) {
   if (changed((controls) => controls.playerDisplayProfile)) {
     commands.push([DISPLAY_PROFILE_COMMAND, { profile: settings.playerDisplayProfile }]);
   }
+  if (changed((controls) => controls.playerLevelMeter)) {
+    commands.push(["preview_set_level_meter", { enabled: settings.playerLevelMeter }]);
+  }
   return commands;
 }
 
@@ -102,7 +107,15 @@ export function playerWarningText(warnings) {
 
 // every field fills on its own, and a device list that fails leaves the saved device and says why
 export async function fillPlayerControlFields(fields, settings, { listSoundDevices, makeOption }) {
-  const { playerPicture, playerSound, playerSubtitles, playerDisplayProfile, playerStereo, cpuDecodeResolution } = settings;
+  const {
+    playerPicture,
+    playerSound,
+    playerSubtitles,
+    playerDisplayProfile,
+    playerStereo,
+    playerLevelMeter,
+    cpuDecodeResolution,
+  } = settings;
   fields.displayProfile.value = playerDisplayProfile ?? "";
   fields.stereo.value = playerStereo;
   fields.cpuDecodeResolution.value = cpuDecodeResolution;
@@ -117,6 +130,7 @@ export async function fillPlayerControlFields(fields, settings, { listSoundDevic
   fields.subtitleOffsetPercent.value = playerSubtitles.offsetPercent;
   fields.subtitleColourOverridden.checked = playerSubtitles.colour !== null;
   fields.subtitleColour.value = playerSubtitles.colour ?? DEFAULT_SUBTITLE_COLOUR;
+  fields.levelMeter.checked = playerLevelMeter;
   const listing = await listSoundDevices().then(
     (names) => ({ names, error: null }),
     (error) => ({ names: [], error: `${SOUND_DEVICES_FAILED_TEXT}: ${error}` }),

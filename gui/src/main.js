@@ -106,6 +106,7 @@ const playerFields = {
   soundDeviceError: document.getElementById("set-player-sound-device-error"),
   soundLayout: document.getElementById("set-player-sound-layout"),
   soundDelayMilliseconds: document.getElementById("set-player-sound-delay"),
+  levelMeter: document.getElementById("set-player-level-meter"),
   subtitleOffsetPercent: document.getElementById("set-player-subtitle-offset"),
   subtitleColourOverridden: document.getElementById("set-player-subtitle-colour-overridden"),
   subtitleColour: document.getElementById("set-player-subtitle-colour"),
@@ -535,6 +536,7 @@ function playerControlsFromForm() {
     subtitleColour: playerFields.subtitleColour.value,
     displayProfile: playerFields.displayProfile.value,
     stereo: playerFields.stereo.value,
+    levelMeter: playerFields.levelMeter.checked,
     cpuDecodeResolution: playerFields.cpuDecodeResolution.value,
   });
 }
@@ -566,8 +568,15 @@ async function applyPlayerControls(settings) {
     if (command === DISPLAY_PROFILE_COMMAND) await applyDisplayProfile(args);
     else await invoke(command, args);
   }
-  const { playerPicture, playerSound, playerSubtitles, playerDisplayProfile, playerStereo } = settings;
-  appliedPlayerControls = { playerPicture, playerSound, playerSubtitles, playerDisplayProfile, playerStereo };
+  const { playerPicture, playerSound, playerSubtitles, playerDisplayProfile, playerStereo, playerLevelMeter } = settings;
+  appliedPlayerControls = {
+    playerPicture,
+    playerSound,
+    playerSubtitles,
+    playerDisplayProfile,
+    playerStereo,
+    playerLevelMeter,
+  };
 }
 
 function showPlayerWarnings(metadata) {

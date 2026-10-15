@@ -27,6 +27,7 @@ pub struct Settings {
     pub player_sound: SoundControls,
     pub player_subtitles: SubtitleControls,
     pub player_stereo: StereoMode,
+    pub player_level_meter: bool,
     #[serde(alias = "decodeResolution")]
     pub cpu_decode_resolution: DecodeResolution,
     // a monitor ICC profile for DCP pictures, None is the built-in sRGB
@@ -162,6 +163,7 @@ mod tests {
                 colour: Some("#ffcc00".to_string()),
             },
             player_stereo: StereoMode::SideBySide,
+            player_level_meter: true,
             cpu_decode_resolution: DecodeResolution::Half,
             player_display_profile: Some(PathBuf::from("/usr/share/color/icc/booth.icc")),
             require_hdcp: true,
@@ -205,6 +207,7 @@ mod tests {
         );
         assert_eq!(json["requireHdcp"], serde_json::json!(true));
         assert_eq!(json["playerStereo"], serde_json::json!("sideBySide"));
+        assert_eq!(json["playerLevelMeter"], serde_json::json!(true));
         assert_eq!(json["cpuDecodeResolution"], serde_json::json!("half"));
         assert_eq!(
             json["playerDisplayProfile"],
@@ -245,6 +248,7 @@ mod tests {
         assert_eq!(settings.player_display_profile, None);
         assert!(!settings.require_hdcp);
         assert_eq!(settings.player_stereo, StereoMode::LeftEye);
+        assert!(!settings.player_level_meter);
         assert_eq!(settings.cpu_decode_resolution, DecodeResolution::Automatic);
     }
 

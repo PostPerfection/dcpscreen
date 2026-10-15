@@ -29,6 +29,17 @@ body {
   visibility: visible;
 }
 
+/* outside the HUD so it stays shown while the HUD fades */
+.player-level-meter {
+  position: fixed;
+  top: 0;
+  right: 0;
+  padding: 8px;
+  background: rgba(0, 0, 0, 0.6);
+  color: var(--text);
+  pointer-events: none;
+}
+
 .player-hint {
   color: var(--text);
   font-size: 12px;

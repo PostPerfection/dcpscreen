@@ -24,6 +24,7 @@ const FIELDS = {
   subtitleColour: '#ffcc00',
   displayProfile: '/profiles/booth.icc',
   stereo: 'sideBySide',
+  levelMeter: false,
   cpuDecodeResolution: 'automatic',
 };
 
@@ -36,6 +37,7 @@ test('the form fields become the settings the backend reads', () => {
     playerSubtitles: { offsetPercent: 4, colour: null },
     playerDisplayProfile: '/profiles/booth.icc',
     playerStereo: 'sideBySide',
+    playerLevelMeter: false,
     cpuDecodeResolution: 'automatic',
   });
   assert.equal(playerControlsFromFields({ ...FIELDS, displayProfile: '' }).playerDisplayProfile, null);
@@ -57,6 +59,7 @@ test('with nothing applied yet every control is sent', () => {
       'preview_set_subtitle_presentation',
       'preview_set_stereo_output',
       'preview_set_display_profile',
+      'preview_set_level_meter',
     ],
   );
 });
@@ -119,7 +122,7 @@ function fakeField() {
 function fakeFields() {
   const names = ['displayProfile', 'brightness', 'maskTop', 'maskBottom', 'maskLeft', 'maskRight', 'scaling',
     'soundDevice', 'soundDeviceError', 'soundLayout', 'soundDelayMilliseconds', 'subtitleOffsetPercent',
-    'subtitleColourOverridden', 'subtitleColour', 'stereo', 'cpuDecodeResolution'];
+    'subtitleColourOverridden', 'subtitleColour', 'stereo', 'levelMeter', 'cpuDecodeResolution'];
   return Object.fromEntries(names.map((name) => [name, fakeField()]));
 }
 
@@ -129,6 +132,7 @@ const SAVED = {
   playerSubtitles: { offsetPercent: 4, colour: '#ffcc00' },
   playerDisplayProfile: '/profiles/booth.icc',
   playerStereo: 'topAndBottom',
+  playerLevelMeter: true,
   cpuDecodeResolution: 'half',
 };
 const makeOption = (value, text) => ({ value, text });
@@ -151,6 +155,7 @@ test('a sound device list that fails still fills every field and says why under 
   assert.equal(fields.subtitleColourOverridden.checked, true);
   assert.equal(fields.subtitleColour.value, '#ffcc00');
   assert.equal(fields.stereo.value, 'topAndBottom');
+  assert.equal(fields.levelMeter.checked, true);
   assert.equal(fields.cpuDecodeResolution.value, 'half');
   assert.equal(fields.soundDevice.value, 'HDMI 1');
   assert.deepEqual(fields.soundDevice.options.map((option) => option.value), ['', 'HDMI 1']);
@@ -174,4 +179,11 @@ test('a sound device list that works fills the choices and hides the error', asy
 test('a changed 3D output is sent on its own', () => {
   const topAndBottom = playerControlsFromFields({ ...FIELDS, stereo: 'topAndBottom' });
   assert.deepEqual(playerControlCommands(CONTROLS, topAndBottom), [['preview_set_stereo_output', { output: 'topAndBottom' }]]);
+});
+
+test('ticking the level meter turns metering on, and unticking turns it off', () => {
+  const metered = playerControlsFromFields({ ...FIELDS, levelMeter: true });
+  assert.equal(metered.playerLevelMeter, true);
+  assert.deepEqual(playerControlCommands(CONTROLS, metered), [['preview_set_level_meter', { enabled: true }]]);
+  assert.deepEqual(playerControlCommands(metered, CONTROLS), [['preview_set_level_meter', { enabled: false }]]);
 });

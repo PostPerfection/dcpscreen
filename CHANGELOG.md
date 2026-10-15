@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+### Added
+- Settings has a Level meter for the player, off by default. While it is on, the player window shows a bar per channel of the playing composition in its top right corner, which stays while the controls fade out. While it is off the player computes no levels.
+
 ## [0.1.1] - 2026-10-15
 
 ### Changed
