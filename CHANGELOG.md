@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+## [0.1.1] - 2026-10-15
+
+### Changed
+- Built against grok v20.4.17.
+
 ## [0.1.0] - 2026-10-15
 
 - A composition's subtitles and closed captions show in the player, SMPTE timed text (encrypted ones with the KDM's keys) and Interop text or PNG, from a version file's original version too. The player's controls show a Subtitles button naming the language, which hides or shows them for this and the following compositions, and a Language button when a track comes in several languages. An IMP's IMSC subtitles do not show yet.
