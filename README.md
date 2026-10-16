@@ -50,6 +50,8 @@ python3 run-gpu-gui.py [/path/to/grok/install]
 
 Settings are kept in `~/.config/dcpscreen/settings.json`. The library (`library.json`), the KDM store (`kdms/`), the playlists (`playlists/<name>.json`) and the verify jobs (`jobs.jsonl`) are kept in `~/.local/share/dcpscreen`. `XDG_CONFIG_HOME` and `XDG_DATA_HOME` move them, and `DCPSCREEN_JOBS_FILE` names a jobs file of its own. The library is refreshed from the folders in Settings at startup and prints what it found as `[library] refresh: ...` on stdout.
 
+Encrypted IMF sound does not play. asdcplib's AS-02 PCM reader ignores the decryption context it is given, and its writer refuses to encrypt clip-wrapped PCM, so there is no reader to fix against and no fixture to test with. The player refuses such a track by name.
+
 ## Playlists
 
 A playlist runs compositions and intermissions in order. A composition row can play part of its composition, from its In timecode to the frame before its Out timecode. A composition that follows another composition plays straight on with no black frame between them. An intermission stops the picture and holds black or its still image for its length. A row with a start time waits on black until that local time when the row before ends earlier, and starts late, with a warning on the Playlist view, when the row before ends after it. The KDM for an encrypted composition is picked from the store when the row loads. Playing a composition from the library, Stop or closing the player window ends the playlist. The log lines start with `[playlist]`.

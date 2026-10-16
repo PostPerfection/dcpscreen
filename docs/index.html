@@ -440,7 +440,7 @@
         </div>
         <div class="feature-card">
             <h3>HDCP check</h3>
-            <p>On Linux, "Require HDCP for encrypted content" plays an encrypted composition only when the output the player window is on reads Content Protection Enabled, and stops within 2 seconds of it leaving Enabled. GNOME and KDE never turn HDCP on, so on those desktops the setting blocks every encrypted composition.</p>
+            <p>"Require HDCP for encrypted content" plays an encrypted composition only when the output the player window is on reads HDCP on, and stops within 2 seconds of it going off. On Linux that is the DRM Content Protection property, and GNOME and KDE never turn HDCP on, so on those desktops the setting blocks every encrypted composition. On Windows the player asks the driver for HDCP through Output Protection Manager and plays once every output of its monitor reads it on.</p>
         </div>
     </div>
 </section>
