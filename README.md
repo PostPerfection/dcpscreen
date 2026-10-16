@@ -56,11 +56,15 @@ A playlist runs compositions and intermissions in order. A composition row can p
 
 ## HDCP
 
-"Require HDCP for encrypted content" reads the DRM "Content Protection" property of the output the player window is on, from `/dev/dri/card*` as the logged in user, and plays encrypted content only when it reads Enabled. Only the compositor can turn HDCP on, and GNOME and KDE never do, so on those desktops the setting blocks every encrypted composition. nvidia-drm has no Content Protection property, so its outputs count as not protected.
+On Linux, "Require HDCP for encrypted content" reads the DRM "Content Protection" property of the output the player window is on, from `/dev/dri/card*` as the logged in user, and plays encrypted content only when it reads Enabled. Only the compositor can turn HDCP on, and GNOME and KDE never do, so on those desktops the setting blocks every encrypted composition. nvidia-drm has no Content Protection property, so its outputs count as not protected.
 
 The output is found by matching the monitor name GDK gives the player window against each connected connector under `/sys/class/drm`: the connector name (`DP-9`, what GDK reports on X11) or the model from the connector's EDID (the product name, or the product code as `0x0a9b`, what mutter reports on Wayland). Several connected monitors of the same model must all read Enabled. When no connector matches, the output counts as not protected.
 
-`cargo test -- --ignored` runs a test that reads the property from every amdgpu connector on the machine. It is ignored by default because GitHub runners have no `/dev/dri`.
+In postkit, `cargo test output_protection -- --ignored` runs a test that reads the property from every amdgpu connector on the machine. It is ignored by default because GitHub runners have no `/dev/dri`.
+
+On Windows the setting uses Output Protection Manager (OPM). When encrypted content starts, dcpscreen opens an OPM session on each output of the monitor the player window is on, asks the driver to turn HDCP on, and plays only when every output reads HDCP on. The session signs every request and checks the driver's signature on every answer. Only that one monitor is checked, so the part of a window that spans onto a second monitor is not. Every 2 s the check reads HDCP again and stops playback when an output reads it off, reports a lost link or tampering, or a step fails. A monitor or cable without HDCP, an analog output and a laptop's internal panel count as not protected, so encrypted content does not play there. The sessions stay open while HDCP reads on, so HDCP stays requested on that monitor after encrypted playback ends, until a check fails, the window moves to another monitor or the app exits. The driver's certificate chain is not checked against a Microsoft root.
+
+On macOS the setting shows as not supported and encrypted content always plays.
 
 ## Settings lock
 

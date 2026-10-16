@@ -3,6 +3,7 @@
 ## Unreleased
 
 ### Added
+- "Require HDCP for encrypted content" works on Windows. It asks Output Protection Manager to turn HDCP on for every output of the player window's monitor, plays encrypted content only when they all read it on, and checks again every 2 s. macOS still shows the setting as not supported.
 - Settings has a Level meter for the player, off by default. While it is on, the player window shows a bar per channel of the playing composition in its top right corner, which stays while the controls fade out. While it is off the player computes no levels.
 
 ## [0.1.1] - 2026-10-15
