@@ -3,6 +3,8 @@
 ## Unreleased
 
 ### Added
+- An IMP's IMSC subtitles show in the player, text profile with its styling, alignment and region placement, and image profile PNGs placed and scaled to their region. Sequences of one language share the Subtitles slot. An image the track file does not carry is a player warning naming it.
+- On macOS and Windows the player presents in deep colour when the driver gives it a 10 bit or float framebuffer, with CPU decoded DCP pictures coloured at 16 bits, and ties presentation to vsync. Linux stays 8 bit through GTK, and device coloured frames stay 8 bit.
 - "Require HDCP for encrypted content" works on Windows. It asks Output Protection Manager to turn HDCP on for every output of the player window's monitor, plays encrypted content only when they all read it on, and checks again every 2 s. macOS still shows the setting as not supported.
 - Settings has a Level meter for the player, off by default. While it is on, the player window shows a bar per channel of the playing composition in its top right corner, which stays while the controls fade out. While it is off the player computes no levels.
 
