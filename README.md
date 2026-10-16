@@ -42,6 +42,12 @@ Play opens the player as a normal window. DCP pictures are shown through the Mon
 
 grok looks for `libgrokj2k_plugin` in the directory `GRK_PLUGIN_PATH` names, then in the working directory, then in the executable's own directory, and never on `LD_LIBRARY_PATH`. Without the plugin the player decodes on the CPU. `GRK_NO_PLUGIN=1` keeps grok on the CPU even when the plugin is found.
 
+`run-gpu-gui.py` rebuilds the release binary against a grok install that has the plugin and launches it with `GRK_PLUGIN_PATH` and the loader path set. The install root defaults to `~/bin/grok-gpu`:
+
+```bash
+python3 run-gpu-gui.py [/path/to/grok/install]
+```
+
 Settings are kept in `~/.config/dcpscreen/settings.json`. The library (`library.json`), the KDM store (`kdms/`), the playlists (`playlists/<name>.json`) and the verify jobs (`jobs.jsonl`) are kept in `~/.local/share/dcpscreen`. `XDG_CONFIG_HOME` and `XDG_DATA_HOME` move them, and `DCPSCREEN_JOBS_FILE` names a jobs file of its own. The library is refreshed from the folders in Settings at startup and prints what it found as `[library] refresh: ...` on stdout.
 
 ## Playlists
