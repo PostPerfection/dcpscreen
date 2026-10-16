@@ -1,4 +1,4 @@
-import { withSavedChoice } from "./saved-choices.js";
+import { withSavedChoice } from "../../extern/guikit/src/saved-choices.js";
 
 // the saved monitor while it is connected, otherwise the one the main window is on
 export function fullscreenMonitor(monitors, savedName, mainWindowMonitor) {
