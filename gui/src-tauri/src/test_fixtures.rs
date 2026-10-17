@@ -2,7 +2,7 @@ use chrono::{DateTime, Duration, Utc};
 use postkit::certificate::{build_kdm, generate_chain, KdmConfig, KdmContentKey, KdmFormulation};
 use postkit::packaging::{
     ns, App2eEdition, AssetMap, AssetMapAsset, DcpCpl, DcpCplReel, ImfCpl, ImfEssenceDescriptor,
-    ImfResource, ImfTrackKind, PackingList, PklAsset,
+    ImfSegment, ImfSequence, ImfTrackKind, PackingList, PklAsset,
 };
 use std::path::{Path, PathBuf};
 use std::sync::OnceLock;
@@ -165,11 +165,13 @@ pub fn write_imp_package(directory: &Path) {
         title: "Review Master".into(),
         fps_num: 24000,
         fps_den: 1001,
-        resources: vec![ImfResource {
-            track_file_uuid: IMP_PICTURE_ID.into(),
-            duration: IMP_FRAMES,
-            kind: ImfTrackKind::Image,
-            source_encoding: Some(IMP_PICTURE_DESCRIPTOR_ID.into()),
+        segments: vec![ImfSegment {
+            sequences: vec![ImfSequence::whole_track_file(
+                ImfTrackKind::Image,
+                IMP_PICTURE_ID.into(),
+                IMP_FRAMES,
+                Some(IMP_PICTURE_DESCRIPTOR_ID.into()),
+            )],
         }],
         essence_descriptors: vec![ImfEssenceDescriptor {
             id: IMP_PICTURE_DESCRIPTOR_ID.into(),
