@@ -19,6 +19,7 @@ import {
   subtitleHudText,
   subtitleLanguageHudText,
 } from "./subtitle-toggle.js";
+import { nextSoundSource, soundSourceHudText } from "./sound-source-toggle.js";
 import { AUTOMATIC_RESOLUTION, decodeScaleHudText, nextPicker, startPicker, startingScale } from "./decode-scale-picker.js";
 
 const MAIN_WINDOW_LABEL = "main";
@@ -45,6 +46,7 @@ const holdCountdown = document.getElementById("player-hold-countdown");
 const stereoButton = document.getElementById("player-stereo-btn");
 const subtitlesButton = document.getElementById("player-subtitles-btn");
 const subtitleLanguageButton = document.getElementById("player-subtitle-language-btn");
+const soundSourceButton = document.getElementById("player-sound-source-btn");
 const decodeScaleLabel = document.getElementById("player-decode-scale");
 // the main page sends the CPU Decode Resolution choice at startup and when Settings are saved
 const CPU_DECODE_RESOLUTION_EVENT = "cpu-decode-resolution-changed";
@@ -212,8 +214,23 @@ subtitlesButton.addEventListener("click", () => {
     .catch(reportFailure);
 });
 
+// the metadata the sound button last showed, which its click switches from
+let soundSourceMetadata = {};
+
+function showSoundSource(meta) {
+  soundSourceMetadata = meta;
+  const text = soundSourceHudText(meta);
+  soundSourceButton.hidden = !text;
+  soundSourceButton.textContent = text ?? "";
+}
+
+soundSourceButton.addEventListener("click", () => {
+  invoke("preview_set_sound_source", { source: nextSoundSource(soundSourceMetadata) }).catch(reportFailure);
+});
+
 async function followMetadata(meta) {
   showSubtitleTracks(meta);
+  showSoundSource(meta);
   const stereoMode = meta.stereoscopic ? await invoke("preview_stereo_output") : null;
   showStereoOutput(stereoMode);
   await pickDecodeScale(meta, stereoMode);
